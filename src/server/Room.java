@@ -190,6 +190,7 @@ public class Room {
             factory.restartGame();
             ratingsAppliedForCurrentGame = false;
         }
+        ServerLog.info("Room " + roomId + ": game restarted");
         broadcastState();
     }
 
@@ -252,6 +253,8 @@ public class Room {
         ratingsAppliedForCurrentGame = true;
 
         ratingService.applyGameEnd(winnerColor, whiteSession, blackSession);
+        ServerLog.info("Room " + roomId + ": game ended, winner=" + winnerColor
+                + ", ratings now white=" + whiteSession.getRating() + " black=" + blackSession.getRating());
 
         broadcastAssignments();
     }
@@ -272,11 +275,13 @@ public class Room {
 
             MoveCommand command = MoveCommand.parse(message, engine.getBoardRows());
             if (command == null) {
+                ServerLog.warn("Room " + roomId + ": malformed move command: " + message);
                 conn.send(StateCodec.encodeError("Malformed command: " + message));
                 return false;
             }
 
             if (!isAuthorized(conn, command.color)) {
+                ServerLog.warn("Room " + roomId + ": unauthorized move attempt for color " + command.color);
                 conn.send(StateCodec.encodeError("You can only move your own pieces."));
                 return false;
             }
@@ -297,11 +302,13 @@ public class Room {
 
             JumpCommand command = JumpCommand.parse(message, engine.getBoardRows());
             if (command == null) {
+                ServerLog.warn("Room " + roomId + ": malformed jump command: " + message);
                 conn.send(StateCodec.encodeError("Malformed command: " + message));
                 return false;
             }
 
             if (!isAuthorized(conn, command.color)) {
+                ServerLog.warn("Room " + roomId + ": unauthorized jump attempt for color " + command.color);
                 conn.send(StateCodec.encodeError("You can only move your own pieces."));
                 return false;
             }
@@ -326,6 +333,7 @@ public class Room {
     private boolean piecePresentAndMatches(Optional<Piece> piece, PieceColor color, PieceKind kind, WebSocket conn,
             String noPieceMessage) {
         if (!piece.isPresent() || piece.get().getColor() != color || piece.get().getKind() != kind) {
+            ServerLog.warn("Room " + roomId + ": " + noPieceMessage);
             conn.send(StateCodec.encodeError(noPieceMessage));
             return false;
         }
@@ -334,6 +342,7 @@ public class Room {
 
     private boolean respondToResult(WebSocket conn, GameResult<Void> result) {
         if (!result.isSuccess()) {
+            ServerLog.warn("Room " + roomId + ": move/jump rejected: " + result.message());
             conn.send(StateCodec.encodeError(result.message()));
             return false;
         }

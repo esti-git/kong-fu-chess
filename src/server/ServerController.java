@@ -136,6 +136,7 @@ public class ServerController {
     private void handleSeek(WebSocket conn) {
         PlayerSession session = sessionRegistry.get(conn);
         if (session == null || session.getState() != SessionState.IDLE) {
+            ServerLog.warn("Seek rejected: no active session or session not idle");
             return;
         }
         session.setState(SessionState.SEEKING);
@@ -151,6 +152,7 @@ public class ServerController {
             PlayerSession session = matchmaker.remove(conn);
             if (session != null) {
                 session.setState(SessionState.IDLE);
+                ServerLog.info(session.getUsername() + " seek timed out, no match found");
             }
             conn.send(StateCodec.encodeSeekTimeout("Couldn't find a match. Try again."));
         }
@@ -159,6 +161,7 @@ public class ServerController {
     private PlayerSession requireIdleSession(WebSocket conn, String errorMessage) {
         PlayerSession session = sessionRegistry.get(conn);
         if (session == null || session.getState() != SessionState.IDLE) {
+            ServerLog.warn("Request rejected: " + errorMessage);
             conn.send(StateCodec.encodeRoomError(errorMessage));
             return null;
         }
@@ -174,11 +177,13 @@ public class ServerController {
         if (normalizedId.isEmpty()) {
             room = roomRegistry.createRoom(repository, scheduler);
         } else if (normalizedId.length() > MAX_ROOM_NAME_LENGTH) {
+            ServerLog.warn("Create room rejected: name too long (" + normalizedId.length() + " chars)");
             conn.send(StateCodec.encodeRoomError("Room name is too long (max " + MAX_ROOM_NAME_LENGTH + " characters)."));
             return;
         } else {
             room = roomRegistry.createRoomWithId(normalizedId, repository, scheduler);
             if (room == null) {
+                ServerLog.warn("Create room rejected: \"" + normalizedId + "\" already in use");
                 conn.send(StateCodec.encodeRoomError("Room name \"" + normalizedId + "\" is already in use."));
                 return;
             }
@@ -198,6 +203,7 @@ public class ServerController {
         String normalizedId = RoomRegistry.normalizeRoomId(roomId);
         Room room = roomRegistry.get(normalizedId);
         if (room == null) {
+            ServerLog.warn("Join room rejected: room not found: " + roomId);
             conn.send(StateCodec.encodeRoomError("Room not found: " + roomId));
             return;
         }

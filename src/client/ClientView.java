@@ -190,7 +190,6 @@ public class ClientView {
     }
 
     public void onError(String message) {
-        System.err.println("Server rejected command: " + message);
         ClientLog.warn("Server rejected command: " + message);
     }
 
@@ -283,7 +282,6 @@ public class ClientView {
     }
 
     public void onRejected(String message) {
-        System.err.println("Join rejected: " + message);
         ClientLog.warn("Join rejected: " + message);
         System.exit(0);
     }
@@ -293,16 +291,18 @@ public class ClientView {
             onRejected(result.message);
             return;
         }
-        System.out.println("Logged in. Rating: " + result.rating);
+        ClientLog.info("Logged in. Rating: " + result.rating);
     }
 
     public void onOpponentDisconnected(String message) {
         gameOver = true;
+        ClientLog.info("Opponent disconnected: " + message);
         showGameOverOnce(message);
     }
 
     public void onConnectionClosed(String reason) {
         gameOver = true;
+        ClientLog.info("Connection closed: " + reason);
         showGameOverOnce((reason == null || reason.isBlank()) ? "Connection closed. Game over." : reason);
     }
 
@@ -311,7 +311,6 @@ public class ClientView {
             dismissDisconnectCountdown();
             if (disconnectNotified) return;
             disconnectNotified = true;
-            System.out.println(message);
             if (guiWindow != null) {
                 JOptionPane.showMessageDialog(guiWindow, message, "Game Over", JOptionPane.INFORMATION_MESSAGE);
             }

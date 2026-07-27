@@ -2,6 +2,7 @@ package server;
 
 import config.GameConfig;
 import protocol.LoginResult;
+import server.logging.ServerLog;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -30,6 +31,7 @@ public class PlayerRepository {
                         "rating INTEGER NOT NULL DEFAULT " + STARTING_RATING + ")");
             }
         } catch (SQLException e) {
+            ServerLog.error("Failed to open players database", e);
             throw new RuntimeException("Failed to open players database", e);
         }
     }
@@ -60,6 +62,7 @@ public class PlayerRepository {
             }
             return new LoginResult(true, STARTING_RATING, null, false);
         } catch (SQLException e) {
+            ServerLog.error("Login/register query failed for " + username, e);
             return new LoginResult(false, 0, "Login failed: " + e.getMessage(), false);
         }
     }
@@ -71,6 +74,7 @@ public class PlayerRepository {
             update.setString(2, username);
             update.executeUpdate();
         } catch (SQLException e) {
+            ServerLog.error("Failed to update rating for " + username, e);
             throw new RuntimeException("Failed to update rating for " + username, e);
         }
     }

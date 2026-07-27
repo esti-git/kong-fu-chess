@@ -64,7 +64,6 @@ public class GameClient extends WebSocketClient {
 
     @Override
     public void onOpen(ServerHandshake handshake) {
-        System.out.println("Connected to game server");
         ClientLog.info("Connected to game server");
         send(StateCodec.encodeLogin(username, password));
     }
@@ -103,14 +102,12 @@ public class GameClient extends WebSocketClient {
 
     @Override
     public void onClose(int code, String reason, boolean remote) {
-        System.out.println("Disconnected from game server: " + reason);
         ClientLog.info("Disconnected from game server: " + reason);
         onConnectionClosed.accept(reason);
     }
 
     @Override
     public void onError(Exception ex) {
-        ex.printStackTrace();
         ClientLog.error("WebSocket error", ex);
     }
 

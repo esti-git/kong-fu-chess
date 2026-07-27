@@ -50,7 +50,6 @@ public class GameServer extends WebSocketServer {
 
     @Override
     public void onError(WebSocket conn, Exception ex) {
-        ex.printStackTrace();
         ServerLog.error("WebSocket error", ex);
     }
 

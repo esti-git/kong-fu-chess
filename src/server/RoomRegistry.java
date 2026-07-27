@@ -1,6 +1,7 @@
 package server;
 
 import org.java_websocket.WebSocket;
+import server.logging.ServerLog;
 import view.BoardSnapshotFactory;
 
 import java.util.Collection;
@@ -29,12 +30,17 @@ public class RoomRegistry {
             roomId = generateId();
             room = new Room(roomId, repository, scheduler, snapshotFactory);
         } while (rooms.putIfAbsent(roomId, room) != null);
+        ServerLog.info("Room " + roomId + " created");
         return room;
     }
 
     public Room createRoomWithId(String roomId, PlayerRepository repository, ScheduledExecutorService scheduler) {
         Room room = new Room(roomId, repository, scheduler, snapshotFactory);
-        return rooms.putIfAbsent(roomId, room) == null ? room : null;
+        boolean created = rooms.putIfAbsent(roomId, room) == null;
+        if (created) {
+            ServerLog.info("Room " + roomId + " created");
+        }
+        return created ? room : null;
     }
 
     public Room get(String roomId) {
@@ -58,6 +64,7 @@ public class RoomRegistry {
         Room room = rooms.get(roomId);
         if (room != null && room.isEmpty()) {
             rooms.remove(roomId);
+            ServerLog.info("Room " + roomId + " removed (empty)");
         }
     }
 
