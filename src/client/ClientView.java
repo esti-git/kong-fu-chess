@@ -61,7 +61,7 @@ public class ClientView {
 
     private GameClient client;
     private volatile BoardSnapshot latestSnapshot;
-    private final ClientController controller = new ClientController();
+    private final BoardInputHandler inputHandler = new BoardInputHandler();
 
     private PieceColor myColor;
     private String whiteName;
@@ -349,7 +349,7 @@ public class ClientView {
     private void repaintBoard() {
         BoardSnapshot snapshot = latestSnapshot;
         if (snapshot == null) return;
-        Img visualBoard = renderer.render(snapshot, controller.getSelected());
+        Img visualBoard = renderer.render(snapshot, inputHandler.getSelected());
         if (animationController.isShowingGameOverOverlay()) {
             PieceColor winner = animationController.getWinnerColor();
             String winnerText = winner == null ? null : (winner == PieceColor.WHITE ? "White" : "Black") + " wins!";
@@ -360,11 +360,11 @@ public class ClientView {
     }
 
     private void handleClick(int pixelX, int pixelY) {
-        controller.handleClick(client, latestSnapshot, gameOver, spectator, pixelX, pixelY, this::repaintBoard);
+        inputHandler.handleClick(client, latestSnapshot, gameOver, spectator, pixelX, pixelY, this::repaintBoard);
     }
 
     private void handleDoubleClick(int pixelX, int pixelY) {
-        controller.handleDoubleClick(client, latestSnapshot, gameOver, spectator, pixelX, pixelY, this::repaintBoard);
+        inputHandler.handleDoubleClick(client, latestSnapshot, gameOver, spectator, pixelX, pixelY, this::repaintBoard);
     }
 
     private void rescaleSidePanels() {

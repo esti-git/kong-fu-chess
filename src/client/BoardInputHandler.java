@@ -6,7 +6,7 @@ import view.BoardSnapshot;
 import view.PieceSnapshot;
 import view.SelectionState;
 
-public class ClientController {
+public class BoardInputHandler {
 
     private final SelectionState selection = new SelectionState();
 

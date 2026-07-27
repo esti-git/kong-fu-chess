@@ -52,7 +52,7 @@ public class Room {
     private final Map<WebSocket, PlayerSession> spectators = new LinkedHashMap<>();
 
     public Room(String roomId, PlayerRepository repository,
-                ScheduledExecutorService scheduler, BoardSnapshotFactory snapshotFactory) {
+            ScheduledExecutorService scheduler, BoardSnapshotFactory snapshotFactory) {
         this.roomId = roomId;
         this.ratingService = new RatingService(repository);
         this.scheduler = scheduler;
@@ -78,7 +78,8 @@ public class Room {
         }
     }
 
-    public void seatMatch(WebSocket whiteConn, PlayerSession whiteSession, WebSocket blackConn, PlayerSession blackSession) {
+    public void seatMatch(WebSocket whiteConn, PlayerSession whiteSession, WebSocket blackConn,
+            PlayerSession blackSession) {
         synchronized (engineLock) {
             this.whiteConn = whiteConn;
             this.whiteSession = whiteSession;
@@ -174,14 +175,17 @@ public class Room {
         }
         if (resigned) {
             broadcastState();
-            ServerLog.info("Room " + roomId + ": " + disconnected.getUsername() + " disconnected, game stopped (no result, no rating change)");
+            ServerLog.info("Room " + roomId + ": " + disconnected.getUsername()
+                    + " disconnected, game stopped (no result, no rating change)");
         }
     }
 
     public void requestRestart(WebSocket conn) {
         synchronized (engineLock) {
-            if (!engine.isGameOver()) return;
-            if (conn != whiteConn && conn != blackConn) return;
+            if (!engine.isGameOver())
+                return;
+            if (conn != whiteConn && conn != blackConn)
+                return;
 
             factory.restartGame();
             ratingsAppliedForCurrentGame = false;
@@ -229,8 +233,10 @@ public class Room {
         int whiteRating = whiteSession == null ? 1200 : whiteSession.getRating();
         int blackRating = blackSession == null ? 1200 : blackSession.getRating();
 
-        if (whiteConn != null) whiteConn.send(StateCodec.encodeAssign(PieceColor.WHITE, whiteName, blackName, whiteRating, blackRating));
-        if (blackConn != null) blackConn.send(StateCodec.encodeAssign(PieceColor.BLACK, whiteName, blackName, whiteRating, blackRating));
+        if (whiteConn != null)
+            whiteConn.send(StateCodec.encodeAssign(PieceColor.WHITE, whiteName, blackName, whiteRating, blackRating));
+        if (blackConn != null)
+            blackConn.send(StateCodec.encodeAssign(PieceColor.BLACK, whiteName, blackName, whiteRating, blackRating));
 
         String spectateMsg = StateCodec.encodeSpectate(whiteName, blackName, whiteRating, blackRating);
         for (WebSocket spectatorConn : spectators.keySet()) {
@@ -261,7 +267,8 @@ public class Room {
 
     public boolean handleMove(WebSocket conn, String message) {
         synchronized (engineLock) {
-            if (rejectIfPausedForDisconnect(conn)) return false;
+            if (rejectIfPausedForDisconnect(conn))
+                return false;
 
             MoveCommand command = MoveCommand.parse(message, engine.getBoardRows());
             if (command == null) {
@@ -274,7 +281,8 @@ public class Room {
                 return false;
             }
 
-            if (!piecePresentAndMatches(engine.pieceAt(command.from), command.color, command.kind, conn, "No matching piece at source square")) {
+            if (!piecePresentAndMatches(engine.pieceAt(command.from), command.color, command.kind, conn,
+                    "No matching piece at source square")) {
                 return false;
             }
 
@@ -284,7 +292,8 @@ public class Room {
 
     public boolean handleJump(WebSocket conn, String message) {
         synchronized (engineLock) {
-            if (rejectIfPausedForDisconnect(conn)) return false;
+            if (rejectIfPausedForDisconnect(conn))
+                return false;
 
             JumpCommand command = JumpCommand.parse(message, engine.getBoardRows());
             if (command == null) {
@@ -297,7 +306,8 @@ public class Room {
                 return false;
             }
 
-            if (!piecePresentAndMatches(engine.pieceAt(command.position), command.color, command.kind, conn, "No matching piece at jump square")) {
+            if (!piecePresentAndMatches(engine.pieceAt(command.position), command.color, command.kind, conn,
+                    "No matching piece at jump square")) {
                 return false;
             }
 
@@ -313,7 +323,8 @@ public class Room {
         return false;
     }
 
-    private boolean piecePresentAndMatches(Optional<Piece> piece, PieceColor color, PieceKind kind, WebSocket conn, String noPieceMessage) {
+    private boolean piecePresentAndMatches(Optional<Piece> piece, PieceColor color, PieceKind kind, WebSocket conn,
+            String noPieceMessage) {
         if (!piece.isPresent() || piece.get().getColor() != color || piece.get().getKind() != kind) {
             conn.send(StateCodec.encodeError(noPieceMessage));
             return false;
@@ -361,10 +372,13 @@ public class Room {
     }
 
     private void broadcastToRoom(String json) {
-        if (whiteConn != null && whiteConn.isOpen()) whiteConn.send(json);
-        if (blackConn != null && blackConn.isOpen()) blackConn.send(json);
+        if (whiteConn != null && whiteConn.isOpen())
+            whiteConn.send(json);
+        if (blackConn != null && blackConn.isOpen())
+            blackConn.send(json);
         for (WebSocket spectatorConn : spectators.keySet()) {
-            if (spectatorConn.isOpen()) spectatorConn.send(json);
+            if (spectatorConn.isOpen())
+                spectatorConn.send(json);
         }
     }
 

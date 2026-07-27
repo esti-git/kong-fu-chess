@@ -90,6 +90,59 @@ public class StateCodec {
         return root.toString();
     }
 
+    public static NetworkState decodeState(String rawJson) {
+        JSONObject root = new JSONObject(rawJson);
+        int rows = root.getInt("rows");
+        int cols = root.getInt("cols");
+        long gameClock = root.getLong("gameClock");
+        boolean gameOver = root.getBoolean("gameOver");
+        PieceColor winnerColor = root.isNull("winnerColor") ? null : PieceColor.valueOf(root.getString("winnerColor"));
+
+        PieceSnapshot[][] cells = new PieceSnapshot[rows][cols];
+        JSONArray cellsArray = root.getJSONArray("cells");
+        for (int r = 0; r < rows; r++) {
+            JSONArray rowArray = cellsArray.getJSONArray(r);
+            for (int c = 0; c < cols; c++) {
+                Object entry = rowArray.get(c);
+                if (entry instanceof JSONObject) {
+                    cells[r][c] = decodePiece((JSONObject) entry);
+                }
+            }
+        }
+
+        List<PendingMoveSnapshot> moves = new ArrayList<>();
+        for (Object o : root.getJSONArray("pendingMoves")) {
+            JSONObject m = (JSONObject) o;
+            moves.add(new PendingMoveSnapshot(
+                    m.getInt("fromRow"), m.getInt("fromCol"), m.getInt("toRow"), m.getInt("toCol"),
+                    decodePiece(m.getJSONObject("piece")), m.getLong("arrivalTime")));
+        }
+
+        List<PendingJumpSnapshot> jumps = new ArrayList<>();
+        for (Object o : root.getJSONArray("pendingJumps")) {
+            JSONObject j = (JSONObject) o;
+            jumps.add(new PendingJumpSnapshot(
+                    j.getInt("row"), j.getInt("col"), decodePiece(j.getJSONObject("piece")),
+                    j.getLong("startTime"), j.getLong("endTime")));
+        }
+
+        List<PendingRestSnapshot> rests = new ArrayList<>();
+        for (Object o : root.getJSONArray("pendingRests")) {
+            JSONObject r = (JSONObject) o;
+            rests.add(new PendingRestSnapshot(decodePiece(r.getJSONObject("piece")), r.getLong("endTime")));
+        }
+
+        List<CaptureSnapshot> captures = new ArrayList<>();
+        for (Object o : root.getJSONArray("captureLog")) {
+            JSONObject c = (JSONObject) o;
+            captures.add(new CaptureSnapshot(PieceColor.valueOf(c.getString("color")),
+                    PieceKind.valueOf(c.getString("kind"))));
+        }
+
+        BoardSnapshot snapshot = new BoardSnapshot(rows, cols, cells, moves, jumps, rests, captures, gameClock);
+        return new NetworkState(snapshot, gameOver, winnerColor);
+    }
+
     public static String encodeEvent(Event event) {
         JSONObject root = new JSONObject();
         root.put("type", "event");
@@ -117,7 +170,8 @@ public class StateCodec {
                 GameEndedEvent e = (GameEndedEvent) event;
                 root.put("winnerColor", e.getWinnerColor() == null ? JSONObject.NULL : e.getWinnerColor().name());
             }
-            case GameStartedEvent.TYPE -> {}
+            case GameStartedEvent.TYPE -> {
+            }
             default -> throw new IllegalArgumentException("Unknown event type: " + event.getType());
         }
 
@@ -145,7 +199,8 @@ public class StateCodec {
             case GameStartedEvent.TYPE:
                 return new GameStartedEvent();
             case GameEndedEvent.TYPE:
-                PieceColor winnerColor = root.isNull("winnerColor") ? null : PieceColor.valueOf(root.getString("winnerColor"));
+                PieceColor winnerColor = root.isNull("winnerColor") ? null
+                        : PieceColor.valueOf(root.getString("winnerColor"));
                 return new GameEndedEvent(winnerColor);
             default:
                 throw new IllegalArgumentException("Unknown eventType: " + eventType);
@@ -214,7 +269,8 @@ public class StateCodec {
         return new LoginResult(success, rating, message, reconnected);
     }
 
-    public static String encodeAssign(PieceColor color, String whiteName, String blackName, int whiteRating, int blackRating) {
+    public static String encodeAssign(PieceColor color, String whiteName, String blackName, int whiteRating,
+            int blackRating) {
         JSONObject root = new JSONObject();
         root.put("type", "assign");
         root.put("color", color.name());
@@ -350,58 +406,6 @@ public class StateCodec {
 
     public static String decodeErrorMessage(String rawJson) {
         return new JSONObject(rawJson).optString("message", "");
-    }
-
-    public static NetworkState decodeState(String rawJson) {
-        JSONObject root = new JSONObject(rawJson);
-        int rows = root.getInt("rows");
-        int cols = root.getInt("cols");
-        long gameClock = root.getLong("gameClock");
-        boolean gameOver = root.getBoolean("gameOver");
-        PieceColor winnerColor = root.isNull("winnerColor") ? null : PieceColor.valueOf(root.getString("winnerColor"));
-
-        PieceSnapshot[][] cells = new PieceSnapshot[rows][cols];
-        JSONArray cellsArray = root.getJSONArray("cells");
-        for (int r = 0; r < rows; r++) {
-            JSONArray rowArray = cellsArray.getJSONArray(r);
-            for (int c = 0; c < cols; c++) {
-                Object entry = rowArray.get(c);
-                if (entry instanceof JSONObject) {
-                    cells[r][c] = decodePiece((JSONObject) entry);
-                }
-            }
-        }
-
-        List<PendingMoveSnapshot> moves = new ArrayList<>();
-        for (Object o : root.getJSONArray("pendingMoves")) {
-            JSONObject m = (JSONObject) o;
-            moves.add(new PendingMoveSnapshot(
-                    m.getInt("fromRow"), m.getInt("fromCol"), m.getInt("toRow"), m.getInt("toCol"),
-                    decodePiece(m.getJSONObject("piece")), m.getLong("arrivalTime")));
-        }
-
-        List<PendingJumpSnapshot> jumps = new ArrayList<>();
-        for (Object o : root.getJSONArray("pendingJumps")) {
-            JSONObject j = (JSONObject) o;
-            jumps.add(new PendingJumpSnapshot(
-                    j.getInt("row"), j.getInt("col"), decodePiece(j.getJSONObject("piece")),
-                    j.getLong("startTime"), j.getLong("endTime")));
-        }
-
-        List<PendingRestSnapshot> rests = new ArrayList<>();
-        for (Object o : root.getJSONArray("pendingRests")) {
-            JSONObject r = (JSONObject) o;
-            rests.add(new PendingRestSnapshot(decodePiece(r.getJSONObject("piece")), r.getLong("endTime")));
-        }
-
-        List<CaptureSnapshot> captures = new ArrayList<>();
-        for (Object o : root.getJSONArray("captureLog")) {
-            JSONObject c = (JSONObject) o;
-            captures.add(new CaptureSnapshot(PieceColor.valueOf(c.getString("color")), PieceKind.valueOf(c.getString("kind"))));
-        }
-
-        BoardSnapshot snapshot = new BoardSnapshot(rows, cols, cells, moves, jumps, rests, captures, gameClock);
-        return new NetworkState(snapshot, gameOver, winnerColor);
     }
 
     private static JSONObject encodePiece(PieceSnapshot piece) {

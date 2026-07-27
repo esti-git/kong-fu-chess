@@ -1,5 +1,6 @@
 package server;
 
+import config.GameConfig;
 import protocol.LoginResult;
 
 import java.sql.Connection;
@@ -11,13 +12,12 @@ import java.sql.Statement;
 
 public class PlayerRepository {
 
-    private static final String DB_URL = "jdbc:sqlite:players.db";
-    private static final int STARTING_RATING = 1200;
+    private static final int STARTING_RATING = GameConfig.STARTING_RATING;
 
     private final Connection connection;
 
     public PlayerRepository() {
-        this(DB_URL);
+        this(GameConfig.DB_URL);
     }
 
     public PlayerRepository(String jdbcUrl) {
