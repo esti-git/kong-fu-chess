@@ -2,6 +2,19 @@
 
 טיוטת מחשבות למטלה: איך היינו מתכננים את צד השרת אם היינו צריכות לתמוך ב-100 מיליון משתמשים רשומים ו-10 מיליון שחקנים במקביל. המימוש הנוכחי (`ServerMain` יחיד, `GameServer` בתהליך אחד, `players.db` מקומי) הוא נקודת המוצא — כאן זה ה-Design איך הוא היה צריך להיראות בקנה מידה ענן.
 
+**עיקרון מוביל:** לא ה-client ולא ה-Gateway קובעים אף פעם חוק משחק — ה-`GameEngine` הוא ה-single source of truth היחיד ללוגיקת המשחק, בכל קנה מידה.
+
+## 0. רכיבי המערכת
+
+| רכיב | תפקיד | איפה במסמך |
+|---|---|---|
+| **API Gateway** | דברים שאינם זמן אמת: login, rooms, history | סעיף 2 |
+| **WebSocket Gateway** | חיבורים חיים מול ה-client, שולח state updates | סעיף 2 |
+| **Matchmaker** | מחבר בין שחקנים למשחק (מי משחק נגד מי) | סעיף 2 |
+| **Game Allocator** | מחליט על איזה Game Server Shard ירוץ כל room | סעיף 2 |
+| **Game Server Shards** | מריצים את המשחקים בפועל, `GameEngine` authoritative | סעיף 4 |
+| **Observability** | logs, metrics, health checks, load tests | סעיף 5 |
+
 ## 1. DB ל-100 מיליון משתמשים רשומים
 
 **SQLite לא מתאים**, מכמה סיבות:
@@ -11,7 +24,7 @@
 
 **מה כן:**
 - DB מבוזר עם partitioning לפי `userId` (למשל hash-based sharding), כדי שאף שרד DB בודד לא יהיה נקודת צוואר בקבוק.
-- אפשרויות סבירות: Postgres עם sharding (Citus / Vitess-style) אם רוצים עולם רלציוני מוכר, או DB NoSQL מבוזר מטבעו (Cassandra / DynamoDB) שמתוכנן מראש לכתיבות גבוהות ולזמינות רב-אזורית.
+- אפשרויות סבירות: Postgres עם sharding (Citus / Vitess-style) אם רוצים עולם רלציוני מוכר, או DB NoSQL מבוזר מטבעו (Cassandra / DynamoDB) שמתוכנן מראש לכתיבות גבוהות ולזמינות רב-אזורית. **לצורך המימוש הקטן/ה-demo (Docker Compose) מספיק Postgres רגיל בלי sharding** — ה-sharding נדרש רק כשבאמת מגיעים לסדר גודל של 100 מיליון משתמשים רשומים, לא לגרסת הפיתוח.
 - **הפרדה בין נתונים "כבדים" לנתונים "חמים":** פרופיל משתמש, ELO, היסטוריית משחקים — ב-DB המבוזר. מצב משחק בזמן אמת (מיקום כלים, cooldowns) — **לא** נשמר ב-DB הראשי בכלל; הוא חי רק בזיכרון של שרת המשחק המארח, ונכתב ל-DB רק בסיום (תוצאה, שינוי ELO). זה מוריד דרמטית את העומס על ה-DB, כי הוא לא צריך "לראות" כל מהלך.
 - Cache שכבתי (Redis) מול ה-DB לנתונים שנקראים הרבה וכמעט לא משתנים (למשל דירוג ELO להצגה, סטטוס "מחובר/לא מחובר").
 - **כתיבת תוצאות דרך Message Queue:** גם כתיבה "רק בסיום" יכולה ליצור burst — כשמיליוני משחקים קצרים (30-90 שניות) מסתיימים כל הזמן, הכתיבות ל-DB לא מגיעות בקצב אחיד. Game Server לא כותב ישירות ל-DB אלא מפרסם הודעת "תוצאה" לתור (Kafka/SQS), ותהליך worker נפרד צורך מהתור וכותב ל-DB בקצב שהוא יכול לעמוד בו. זה מנתק את קצב סיום המשחקים מקצב הכתיבה בפועל, ומונע אובדן תוצאה אם ה-DB רגעית איטי.
@@ -22,22 +35,25 @@
 
 הפתרון: כמה "תפקידים" נפרדים (כל אחד יכול להיות סוג משלו של Docker, שמתרבה בנפרד):
 
-1. **Gateway / Load Balancer** — נקודת הכניסה היחידה מבחוץ. לא מכיל לוגיקת משחק, רק מנתב חיבורים.
-2. **Matchmaking Service** (stateless, קל להרחיב אופקית) — אחראי להתאים שני שחקנים (או שחקן שרוצה חדר ספציפי) זה לזה, ולבחור על איזה Game Server Docker לפתוח את המשחק.
-3. **Game Server instances** (stateful, כמו `GameServer` היום, אבל כל instance מארח **הרבה** חדרים במקביל, לא אחד) — כאן רץ ה-`RuleEngine`/`GameEngine` בפועל.
-4. **Session/Player Registry** (Redis או דומה) — מיפוי `playerId -> serverId/roomId` בזמן אמת. זה ה"מדריך טלפונים": כל בקשה לדעת "איפה השחקן הזה יושב עכשיו" עוברת דרך כאן, ולא דרך חיפוש בכל השרתים.
+1. **API Gateway** — נקודת הכניסה לכל מה שאינו זמן אמת: login, rooms, history. Stateless, לא מכיל לוגיקת משחק.
+2. **WebSocket Gateway** — נקודת הכניסה לחיבורים חיים מול ה-client; מחזיק את חיבור ה-WebSocket ומעביר state updates. גם הוא לא מכיל לוגיקת משחק — רק proxy/router בין ה-client ל-Game Server הנכון.
+3. **Matchmaker** (stateless, קל להרחיב אופקית) — אחראי **רק** להתאים שני שחקנים (או שחקן שרוצה חדר ספציפי) זה לזה. לא מחליט איפה זה ירוץ.
+4. **Game Allocator** (stateless) — אחראי להחליט על איזה Game Server Shard ירוץ ה-room שה-Matchmaker זה עתה יצר (למשל לפי עומס נוכחי / קרבה גיאוגרפית), ורושם את שני השחקנים תחתיו ב-Registry. הפרדה מה-Matchmaker היא separation of concerns: "מי משחק נגד מי" (Matchmaker) מול "איפה זה ירוץ פיזית" (Allocator) — כך אפשר לשנות את מדיניות ה-load-balancing בין shards בלי לגעת בלוגיקת ההתאמה בין שחקנים, ולהפך.
+5. **Game Server Shards** (stateful, כמו `GameServer` היום, אבל כל instance מארח **הרבה** חדרים במקביל, לא אחד) — כאן רץ ה-`RuleEngine`/`GameEngine` בפועל.
+6. **Session/Player Registry** (Redis או דומה) — מיפוי `playerId -> serverId/roomId` בזמן אמת. זה ה"מדריך טלפונים": כל בקשה לדעת "איפה השחקן הזה יושב עכשיו" עוברת דרך כאן, ולא דרך חיפוש בכל השרתים.
 
 **איך "כולם יכולים לשחק עם כולם" ולהיכנס לכל חדר:**
-- שום שחקן לא "שייך" קבוע לשרת מסוים. ה-Matchmaking Service בוחר דינמית Game Server (למשל לפי עומס נוכחי / קרבה גיאוגרפית) ורושם את שני השחקנים תחתיו ב-Registry.
-- אם שחקן רוצה להצטרף לחדר קיים (spectate / הזמנת חבר) — הוא פונה ל-Gateway, שמסתכל ב-Registry איפה החדר חי, ומחבר אותו (WebSocket redirect, או Gateway כ-proxy שקוף) ישירות ל-Game Server הנכון.
+- שום שחקן לא "שייך" קבוע לשרת מסוים. ה-Game Allocator בוחר דינמית Game Server Shard ורושם את שני השחקנים תחתיו ב-Registry.
+- אם שחקן רוצה להצטרף לחדר קיים (spectate / הזמנת חבר) — הוא פונה ל-WebSocket Gateway, שמסתכל ב-Registry איפה החדר חי, ומחבר אותו (WebSocket redirect, או Gateway כ-proxy שקוף) ישירות ל-Game Server Shard הנכון.
 - כך אין צורך ש"כל שרת ידבר עם כל שרת" — כל התיאום עובר דרך ה-Registry המרכזי (שהוא עצמו כמובן גם מבוזר/replicated כדי לא להיות single point of failure).
-- לב הלוגיקה של משחק בודד (שני שחקנים) תמיד רץ על **אותו** Game Server instance — אין צורך בתקשורת cross-node תוך כדי משחק. תקשורת בין שרתים (למשל Redis Pub/Sub) יכולה לשמש לדברים "רוחביים" כמו התראות/צ'אט גלובלי, אבל **לא** לתיאום מהלכים בזמן אמת — Pub/Sub הוא fire-and-forget בלי persistence, לא מתאים לשום דבר שחייב אמינות (בשונה מה-Message Queue בסעיף 1, ששם דווקא כן צריך אמינות).
+- לב הלוגיקה של משחק בודד (שני שחקנים) תמיד רץ על **אותו** Game Server Shard — אין צורך בתקשורת cross-node תוך כדי משחק. תקשורת בין שרתים (**NATS או Redis Pub/Sub**) יכולה לשמש לדברים "רוחביים" כמו התראות/צ'אט גלובלי, אבל **לא** לתיאום מהלכים בזמן אמת — Pub/Sub הוא fire-and-forget בלי persistence, לא מתאים לשום דבר שחייב אמינות (בשונה מה-Message Queue בסעיף 1, ששם דווקא כן צריך אמינות).
 
 **חלוקת תפקידים בין ה-Dockerים:**
-- Gateway — הרבה instances זהים, stateless, autoscale לפי traffic.
-- Matchmaking — stateless, autoscale לפי קצב בקשות התאמה.
-- Game Server — stateful, autoscale לפי מספר משחקים פעילים (ראה סעיף 4).
+- API Gateway / WebSocket Gateway — הרבה instances זהים, stateless, autoscale לפי traffic.
+- Matchmaker / Game Allocator — stateless, autoscale לפי קצב בקשות התאמה.
+- Game Server Shards — stateful, autoscale לפי מספר משחקים פעילים (ראה סעיף 4).
 - Auth/Account Service מול ה-DB המבוזר — stateless.
+- **מקומית (dev/demo):** Docker Compose מריץ גרסה מצומצמת של כל הרכיבים האלה על מכונה אחת. **בפרודקשן:** Kubernetes/K3s מנהל את אותם תפקידים במאות/אלפי containers עם autoscale אמיתי.
 
 ## 3. נפח תעבורת רשת
 
@@ -62,4 +78,18 @@
 - לעומת זאת, ה-**חיבור** של השחקן (WebSocket session, authentication) הוא סוג אחר של state שיכול להיות ארוך יותר (שחקן נשאר מחובר בין משחקים, בלובי, ממתין להתאמה הבאה) — ולכן הגיוני להפריד את "שכבת החיבור/לובי" (ארוכת-טווח) מ"שכבת המשחק הפעיל" (קצרת-טווח), בדיוק כמו החלוקה ל-Gateway/Matchmaking מול Game Server בסעיף 2.
 - מסקנה נוספת: כיוון שמשחק מסתיים מהר, אין הרבה טעם להשקיע ב-persistence כבד של מצב משחק תוך כדי משחק (checkpointing וכו') — אם Game Server קורס תוך כדי משחק של 60 שניות, עדיף פשוט להתחיל את המשחק מחדש / להכריז תיקו, מאשר לבנות מנגנון recovery יקר לאירוע נדיר וקצר-טווח.
 - **Connection Draining בירידת instance:** כש-Kubernetes מחליט להוריד Game Server pod (scale-down, deploy חדש וכו'), אסור להרוג אותו מיידית — יש להפסיק לנתב אליו משחקים **חדשים**, אבל לתת למשחקים הפעילים עליו (מקסימום 30-90 שניות) לסיים באופן טבעי, ורק אז לכבות. בגלל שמשחק תמיד קצר, זמן ה-drain הנדרש קטן וצפוי (לא כמו למשל שרת עם sessions שנמשכים שעות).
+
+## 5. Observability
+
+בלי נראות אין דרך לדעת אם המערכת המבוזרת הזו בכלל עובדת, ואי אפשר לקבל החלטות autoscale בלי מדדים.
+
+- **Logs** — כל רכיב (Gateway, Matchmaker, Allocator, כל Game Server Shard) כותב לוגים מובנים (structured, לא free text) עם `roomId`/`playerId`/`shardId` כדי לאפשר מעקב אחרי משחק בודד לרוחב כל הרכיבים. נאספים מרכזית (למשל ELK / Loki) ולא נשארים מקומיים על כל container.
+- **Metrics** — לכל רכיב יש מדדים משלו:
+  - Game Server Shard: מספר rooms פעילים, CPU/memory, latency לעיבוד מהלך.
+  - Matchmaker: עומק תור ההתאמה, זמן המתנה ממוצע להתאמה.
+  - Game Allocator: התפלגות עומס בין shards (כדי לוודא שאין "shard חם" אחד).
+  - WebSocket Gateway: מספר חיבורים פתוחים, קצב הודעות.
+  אלו בדיוק המדדים שה-HPA (סעיף 4) וה-autoscaling של שאר הרכיבים מסתמכים עליהם.
+- **Health checks** — endpoint של liveness/readiness לכל pod, כדי ש-Kubernetes ידע מתי instance תקוע/קרס (liveness) לעומת פשוט עמוס/לא מוכן עדיין לקבל תעבורה (readiness) — ההבחנה הזו קריטית בשילוב עם Connection Draining בסעיף 4: pod ש"לא מוכן" (draining) לא מקבל rooms חדשים אבל עדיין "חי".
+- **Load tests** — לפני עלייה לפרודקשן, לדמות בכלי כמו k6/Locust עומס של אלפי חיבורי WebSocket מקבילים ומהלכים בקצב גבוה, כדי לאמת בפועל את חישובי התעבורה בסעיף 3 ואת התנהגות ה-autoscale מסעיף 4 — לא להסתמך רק על חישוב תיאורטי.
 
