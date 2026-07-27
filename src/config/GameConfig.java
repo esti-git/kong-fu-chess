@@ -15,7 +15,7 @@ public class GameConfig {
     public static final int TICK_MS = 16;
     public static final int MAX_ROOM_NAME_LENGTH = 20;
 
-    public static final String DB_URL = "jdbc:sqlite:players.db";
+    public static final String DB_URL = System.getenv().getOrDefault("DB_URL", "jdbc:sqlite:players.db");
     public static final int STARTING_RATING = 1200;
 
 }
