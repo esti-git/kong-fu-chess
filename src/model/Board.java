@@ -1,8 +1,5 @@
 package model;
 
-import model.Piece;
-import model.Position;
-
 public interface Board {
     Piece getPieceAt(Position pos);
     void addPiece(Position pos, Piece piece);

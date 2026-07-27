@@ -12,7 +12,6 @@ import server.PlayerSession;
 import server.Room;
 import server.RoomRegistry;
 import server.SessionState;
-import view.BoardSnapshotFactory;
 
 import java.lang.reflect.Field;
 import java.util.concurrent.Executors;

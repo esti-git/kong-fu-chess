@@ -2,7 +2,6 @@ package model;
 
 import config.GameConfig;
 import lombok.Getter;
-import model.Piece;
 
 @Getter
 public class PendingJump {

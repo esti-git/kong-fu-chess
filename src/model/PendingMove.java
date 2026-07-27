@@ -2,7 +2,6 @@ package model;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import model.Piece;
 
 @Getter
 @AllArgsConstructor

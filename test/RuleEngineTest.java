@@ -1,6 +1,5 @@
 import board.MatrixBoard;
 import common.GameResult;
-import enums.PieceColor;
 import enums.PieceState;
 import io.BoardParser;
 import model.Piece;
