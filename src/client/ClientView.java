@@ -61,6 +61,7 @@ public class ClientView {
 
     private GameClient client;
     private volatile BoardSnapshot latestSnapshot;
+    private final java.util.concurrent.atomic.AtomicBoolean repaintQueued = new java.util.concurrent.atomic.AtomicBoolean(false);
     private final BoardInputHandler inputHandler = new BoardInputHandler();
 
     private PieceColor myColor;
@@ -186,7 +187,9 @@ public class ClientView {
 
     public void onState(NetworkState state) {
         this.latestSnapshot = state.snapshot;
-        SwingUtilities.invokeLater(this::repaintBoard);
+        if (repaintQueued.compareAndSet(false, true)) {
+            SwingUtilities.invokeLater(this::repaintBoard);
+        }
     }
 
     public void onError(String message) {
@@ -346,6 +349,7 @@ public class ClientView {
     }
 
     private void repaintBoard() {
+        repaintQueued.set(false);
         BoardSnapshot snapshot = latestSnapshot;
         if (snapshot == null) return;
         Img visualBoard = renderer.render(snapshot, inputHandler.getSelected());
