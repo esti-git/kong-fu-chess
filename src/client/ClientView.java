@@ -100,6 +100,9 @@ public class ClientView {
         eventBus.subscribe(GameStartedEvent.TYPE, event -> SwingUtilities.invokeLater(() -> {
             gameOver = false;
             disconnectNotified = false;
+            historyTracker.reset();
+            scoreTracker.reset();
+            updateHistoryPanels();
             if (playAgainButton != null) playAgainButton.setVisible(false);
             repaintBoard();
         }));
