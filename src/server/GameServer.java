@@ -39,6 +39,12 @@ public class GameServer extends WebSocketServer {
         scheduler.scheduleAtFixedRate(
                 () -> shardRegistry.registerHeartbeat(GameConfig.SHARD_ID, GameConfig.GAME_SERVER_HOST, roomRegistry.allRooms().size()),
                 0, GameConfig.SHARD_HEARTBEAT_SECONDS, TimeUnit.SECONDS);
+
+        try {
+            new HealthServer(GameConfig.GAME_SERVER_HEALTH_PORT).start();
+        } catch (Exception e) {
+            ServerLog.warn("Failed to start health endpoint on " + GameConfig.GAME_SERVER_HEALTH_PORT + ": " + e.getMessage());
+        }
     }
 
     @Override
@@ -64,7 +70,8 @@ public class GameServer extends WebSocketServer {
 
     @Override
     public void onStart() {
-        ServerLog.info("Game server listening on port " + getPort());
+        ServerLog.info("Game server (shardId=" + GameConfig.SHARD_ID + ") listening on port " + getPort()
+                + ", health on " + GameConfig.GAME_SERVER_HEALTH_PORT);
     }
 
     public void runGameLoop() throws InterruptedException {

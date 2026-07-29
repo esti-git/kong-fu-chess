@@ -54,4 +54,9 @@ public class GameConfig {
 
     public static final String KEY_PREFIX_SHARD = "kfc:shard:";
     public static final int TTL_SECONDS = 15;
+
+    public static final int GAME_SERVER_HEALTH_PORT = Integer
+            .parseInt(System.getenv().getOrDefault("GAME_SERVER_HEALTH_PORT", "9001"));
+    public static final int GATEWAY_HEALTH_PORT = Integer
+            .parseInt(System.getenv().getOrDefault("GATEWAY_HEALTH_PORT", "9002"));
 }

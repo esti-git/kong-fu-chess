@@ -33,6 +33,11 @@ services:
       MATCHMAKER_PORT: 8081
     expose:
       - "8081"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   allocator:
     build:
@@ -46,6 +51,11 @@ services:
       ALLOCATOR_PORT: 8082
     expose:
       - "8082"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   game-server:
     build: .
@@ -55,9 +65,9 @@ services:
       redis:
         condition: service_healthy
       matchmaker:
-        condition: service_started
+        condition: service_healthy
       allocator:
-        condition: service_started
+        condition: service_healthy
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/kungfuchess?user=kungfu&password=kungfu
       REDIS_URL: redis://redis:6379
@@ -66,6 +76,11 @@ services:
       GAME_SERVER_HOST: ws://game-server:8887
     expose:
       - "8887"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9001/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   ws-gateway:
     build:
@@ -75,9 +90,9 @@ services:
       redis:
         condition: service_healthy
       allocator:
-        condition: service_started
+        condition: service_healthy
       game-server:
-        condition: service_started
+        condition: service_healthy
     environment:
       GATEWAY_PORT: 8887
       GAME_SERVER_URL: ws://game-server:8887
@@ -85,6 +100,11 @@ services:
       ALLOCATOR_URL: http://allocator:8082
     ports:
       - "8887:8887"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9002/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   api-gateway:
     build:
@@ -100,6 +120,11 @@ services:
       REDIS_URL: redis://redis:6379
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   pgdata:

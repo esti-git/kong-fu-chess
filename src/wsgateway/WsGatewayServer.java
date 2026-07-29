@@ -4,7 +4,9 @@ import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
 import protocol.StateCodec;
+import config.GameConfig;
 import server.AllocatorClient;
+import server.HealthServer;
 import server.PlayerLocation;
 import server.PlayerRegistry;
 import server.ShardRegistry;
@@ -46,6 +48,12 @@ public class WsGatewayServer extends WebSocketServer {
         this.playerRegistry = playerRegistry;
         this.shardRegistry = shardRegistry;
         this.allocatorClient = allocatorClient;
+
+        try {
+            new HealthServer(GameConfig.GATEWAY_HEALTH_PORT).start();
+        } catch (Exception e) {
+            ServerLog.warn("Failed to start health endpoint on " + GameConfig.GATEWAY_HEALTH_PORT + ": " + e.getMessage());
+        }
     }
 
     @Override
@@ -67,7 +75,9 @@ public class WsGatewayServer extends WebSocketServer {
     }
 
     private void routeAndConnect(WebSocket conn, String firstMessage) {
-        String host = resolveHost(firstMessage);
+        String username = peekUsername(firstMessage);
+        String host = resolveHost(username);
+        ServerLog.info("Gateway: routing " + (username != null ? username : "<unknown>") + " -> " + host);
         try {
             UpstreamProxyClient upstream = new UpstreamProxyClient(new URI(host), conn);
             upstream.connectBlocking();
@@ -79,20 +89,26 @@ public class WsGatewayServer extends WebSocketServer {
         }
     }
 
-    private String resolveHost(String firstMessage) {
+    private String peekUsername(String firstMessage) {
         try {
             if ("login".equals(StateCodec.peekType(firstMessage))) {
-                String username = StateCodec.decodeLoginUsername(firstMessage);
-                Optional<PlayerLocation> location = playerRegistry.find(username);
-                if (location.isPresent() && "IN_ROOM".equals(location.get().status())) {
-                    Optional<String> host = shardRegistry.findHost(location.get().shardId());
-                    if (host.isPresent()) {
-                        return host.get();
-                    }
-                }
+                return StateCodec.decodeLoginUsername(firstMessage);
             }
         } catch (Exception e) {
-            ServerLog.warn("Gateway: failed to resolve routing from first message: " + e.getMessage());
+            ServerLog.warn("Gateway: failed to read username from first message: " + e.getMessage());
+        }
+        return null;
+    }
+
+    private String resolveHost(String username) {
+        if (username != null) {
+            Optional<PlayerLocation> location = playerRegistry.find(username);
+            if (location.isPresent() && "IN_ROOM".equals(location.get().status())) {
+                Optional<String> host = shardRegistry.findHost(location.get().shardId());
+                if (host.isPresent()) {
+                    return host.get();
+                }
+            }
         }
 
         return allocatorClient.allocate().map(AllocatorClient.Allocation::host).orElse(fallbackGameServerUrl);
@@ -113,7 +129,7 @@ public class WsGatewayServer extends WebSocketServer {
 
     @Override
     public void onStart() {
-        ServerLog.info("WS Gateway listening on port " + getPort()
+        ServerLog.info("WS Gateway listening on port " + getPort() + ", health on " + GameConfig.GATEWAY_HEALTH_PORT
                 + " (dynamic routing via Registry/Allocator, fallback " + fallbackGameServerUrl + ")");
     }
 }
