@@ -32,6 +32,18 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/kungfuchess?user=kungfu&password=kungfu
       REDIS_URL: redis://redis:6379
       SHARD_ID: shard-1
+    expose:
+      - "8887"
+
+  ws-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.wsgateway
+    depends_on:
+      - game-server
+    environment:
+      GATEWAY_PORT: 8887
+      GAME_SERVER_URL: ws://game-server:8887
     ports:
       - "8887:8887"
 
