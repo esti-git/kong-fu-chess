@@ -25,9 +25,9 @@ public class AllocateHandler implements HttpHandler {
             return;
         }
 
-        Optional<String> shardId = shardRegistry.pickLeastLoaded();
+        Optional<ShardRegistry.ShardInfo> shard = shardRegistry.pickLeastLoaded();
         JSONObject response = new JSONObject();
-        shardId.ifPresent(id -> response.put("shardId", id));
+        shard.ifPresent(info -> response.put("shardId", info.shardId()).put("host", info.host()));
         sendJson(exchange, 200, response);
     }
 

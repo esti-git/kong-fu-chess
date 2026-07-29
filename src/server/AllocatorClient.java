@@ -9,8 +9,12 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.Optional;
 
 public class AllocatorClient {
+
+    public record Allocation(String shardId, String host) {
+    }
 
     private final String baseUrl;
     private final HttpClient http = HttpClient.newBuilder()
@@ -21,7 +25,8 @@ public class AllocatorClient {
         this.baseUrl = baseUrl;
     }
 
-    public String allocateOrDefault() {
+    /** Asks the Allocator which shard should host a new room, including how to reach it. */
+    public Optional<Allocation> allocate() {
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + "/api/allocate"))
@@ -30,13 +35,20 @@ public class AllocatorClient {
                     .POST(HttpRequest.BodyPublishers.ofString("{}"))
                     .build();
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            String shardId = new JSONObject(response.body()).optString("shardId", "");
-            if (!shardId.isBlank()) {
-                return shardId;
+            JSONObject json = new JSONObject(response.body());
+            String shardId = json.optString("shardId", "");
+            String host = json.optString("host", "");
+            if (!shardId.isBlank() && !host.isBlank()) {
+                return Optional.of(new Allocation(shardId, host));
             }
         } catch (Exception e) {
-            ServerLog.warn("Allocator unreachable, defaulting to local shard: " + e.getMessage());
+            ServerLog.warn("Allocator unreachable: " + e.getMessage());
         }
-        return GameConfig.SHARD_ID;
+        return Optional.empty();
+    }
+
+    /** Convenience for callers that only need the shard id and can fall back to their own. */
+    public String allocateOrDefault() {
+        return allocate().map(Allocation::shardId).orElse(GameConfig.SHARD_ID);
     }
 }

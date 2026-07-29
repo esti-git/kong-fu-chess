@@ -63,6 +63,7 @@ services:
       REDIS_URL: redis://redis:6379
       MATCHMAKER_URL: http://matchmaker:8081
       ALLOCATOR_URL: http://allocator:8082
+      GAME_SERVER_HOST: ws://game-server:8887
     expose:
       - "8887"
 
@@ -71,10 +72,17 @@ services:
       context: .
       dockerfile: Dockerfile.wsgateway
     depends_on:
-      - game-server
+      redis:
+        condition: service_healthy
+      allocator:
+        condition: service_started
+      game-server:
+        condition: service_started
     environment:
       GATEWAY_PORT: 8887
       GAME_SERVER_URL: ws://game-server:8887
+      REDIS_URL: redis://redis:6379
+      ALLOCATOR_URL: http://allocator:8082
     ports:
       - "8887:8887"
 

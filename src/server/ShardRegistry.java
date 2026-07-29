@@ -41,11 +41,14 @@ public class ShardRegistry {
         }
     }
 
-    public Optional<String> pickLeastLoaded() {
+    public record ShardInfo(String shardId, String host) {
+    }
+
+    public Optional<ShardInfo> pickLeastLoaded() {
         if (jedis == null) return Optional.empty();
         try {
             Set<String> keys = jedis.keys(KEY_PREFIX + "*");
-            String best = null;
+            ShardInfo best = null;
             int bestLoad = Integer.MAX_VALUE;
             for (String key : keys) {
                 Map<String, String> fields = jedis.hgetAll(key);
@@ -55,12 +58,23 @@ public class ShardRegistry {
                 int roomCount = Integer.parseInt(fields.getOrDefault("roomCount", "0"));
                 if (roomCount < bestLoad) {
                     bestLoad = roomCount;
-                    best = key.substring(KEY_PREFIX.length());
+                    best = new ShardInfo(key.substring(KEY_PREFIX.length()), fields.get("host"));
                 }
             }
             return Optional.ofNullable(best);
         } catch (Exception e) {
             ServerLog.warn("ShardRegistry: pickLeastLoaded failed: " + e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    public Optional<String> findHost(String shardId) {
+        if (jedis == null) return Optional.empty();
+        try {
+            String host = jedis.hget(KEY_PREFIX + shardId, "host");
+            return Optional.ofNullable(host);
+        } catch (Exception e) {
+            ServerLog.warn("ShardRegistry: findHost failed for " + shardId + ": " + e.getMessage());
             return Optional.empty();
         }
     }
