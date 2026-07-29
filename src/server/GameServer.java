@@ -26,10 +26,11 @@ public class GameServer extends WebSocketServer {
 
     public GameServer(int port, PlayerRepository repository) {
         super(new InetSocketAddress(port));
+        PlayerRegistry playerRegistry = new RedisPlayerRegistry(GameConfig.REDIS_URL);
         Matchmaker matchmaker = new Matchmaker(scheduler);
-        MatchService matchService = new MatchService(matchmaker, roomRegistry, repository, scheduler);
+        MatchService matchService = new MatchService(matchmaker, roomRegistry, repository, scheduler, playerRegistry);
         this.controller = new ServerController(repository, new SessionRegistry(), matchmaker, roomRegistry,
-                matchService, scheduler);
+                matchService, scheduler, playerRegistry);
     }
 
     @Override

@@ -1,11 +1,17 @@
 package client;
 
+import client.logging.ClientLog;
+import config.GameConfig;
+
+import org.json.JSONObject;
+
 import java.net.URI;
 import java.util.Scanner;
 
 public class ClientMain {
     public static void main(String[] args) throws Exception {
-        String url = args.length > 0 ? args[0] : "ws://localhost:8887";
+        String url = args.length > 0 ? args[0] : GameConfig.DEFAULT_WS_PORT;
+        String apiGatewayUrl = args.length > 1 ? args[1] : GameConfig.DEFAULT_HTTP_PORT;
 
         Scanner scanner = new Scanner(System.in);
         System.out.print("Enter username: ");
@@ -16,6 +22,14 @@ public class ClientMain {
 
         System.out.print("Enter password: ");
         String password = scanner.nextLine();
+
+        JSONObject gatewayResult = new ApiGatewayClient(apiGatewayUrl).login(username, password);
+        if (gatewayResult == null) {
+            ClientLog.warn("Falling back to WebSocket-only login (API Gateway unreachable)");
+        } else if (!gatewayResult.optBoolean("success", false)) {
+            System.out.println("Login failed: " + gatewayResult.optString("message", "unknown error"));
+            return;
+        }
 
         ClientView view = new ClientView();
         HomeView home = new HomeView();

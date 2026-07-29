@@ -13,15 +13,42 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   game-server:
     build: .
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/kungfuchess?user=kungfu&password=kungfu
+      REDIS_URL: redis://redis:6379
+      SHARD_ID: shard-1
     ports:
       - "8887:8887"
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.apigateway
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/kungfuchess?user=kungfu&password=kungfu
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "8080:8080"
 
 volumes:
   pgdata:

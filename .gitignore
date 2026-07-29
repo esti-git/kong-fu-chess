@@ -35,6 +35,7 @@ bin/
 # התעלמות מכל תיקיית הפלט של המהדר (כמו target של Maven)
 target/
 bin/
+dependency-reduced-pom.xml
 
 # התעלמות מכל קבצי הלוג
 *.log

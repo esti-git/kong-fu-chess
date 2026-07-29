@@ -21,23 +21,31 @@ public class ServerController {
     private final RoomRegistry roomRegistry;
     private final MatchService matchService;
     private final ScheduledExecutorService scheduler;
+    private final PlayerRegistry playerRegistry;
     private final Object lock = new Object();
 
     public ServerController(PlayerRepository repository, SessionRegistry sessionRegistry, Matchmaker matchmaker,
-            RoomRegistry roomRegistry, MatchService matchService, ScheduledExecutorService scheduler) {
+            RoomRegistry roomRegistry, MatchService matchService, ScheduledExecutorService scheduler,
+            PlayerRegistry playerRegistry) {
         this.repository = repository;
         this.sessionRegistry = sessionRegistry;
         this.matchmaker = matchmaker;
         this.roomRegistry = roomRegistry;
         this.matchService = matchService;
         this.scheduler = scheduler;
+        this.playerRegistry = playerRegistry;
     }
 
     public void handleDisconnect(WebSocket conn) {
         try {
+            PlayerSession session;
             synchronized (lock) {
                 matchmaker.remove(conn);
+                session = sessionRegistry.get(conn);
                 sessionRegistry.remove(conn);
+            }
+            if (session != null) {
+                playerRegistry.markOffline(session.getUsername());
             }
 
             Room room = roomRegistry.roomFor(conn);
@@ -122,6 +130,7 @@ public class ServerController {
         reconnectRoom.reconnect(conn, session, result.rating);
         sessionRegistry.put(conn, session);
         roomRegistry.bind(conn, reconnectRoom.roomId);
+        playerRegistry.markInRoom(name, GameConfig.SHARD_ID, reconnectRoom.roomId);
         conn.send(StateCodec.encodeLoginResult(true, result.rating, null, true));
         ServerLog.info(name + " reconnected to room " + reconnectRoom.roomId);
     }
@@ -129,6 +138,7 @@ public class ServerController {
     private void handleFreshLogin(WebSocket conn, String name, LoginResult result) {
         PlayerSession session = new PlayerSession(name, result.rating);
         sessionRegistry.put(conn, session);
+        playerRegistry.markOnShard(name, GameConfig.SHARD_ID);
         conn.send(StateCodec.encodeLoginResult(true, result.rating, null, false));
         ServerLog.info("Login: " + name + " (rating " + result.rating + ")");
     }
@@ -192,6 +202,7 @@ public class ServerController {
         MatchService.assignAndActivate(session, PieceColor.WHITE);
         room.seatCreator(conn, session);
         roomRegistry.bind(conn, room.roomId);
+        playerRegistry.markInRoom(session.getUsername(), GameConfig.SHARD_ID, room.roomId);
         conn.send(StateCodec.encodeRoomJoined(room.roomId, PlayerRole.WHITE));
         ServerLog.info(session.getUsername() + " created room " + room.roomId);
     }
@@ -211,6 +222,7 @@ public class ServerController {
         PlayerRole role = room.join(conn, session);
         session.setState(SessionState.PLAYING);
         roomRegistry.bind(conn, room.roomId);
+        playerRegistry.markInRoom(session.getUsername(), GameConfig.SHARD_ID, room.roomId);
         conn.send(StateCodec.encodeRoomJoined(room.roomId, role));
         ServerLog.info(session.getUsername() + " joined room " + room.roomId + " as " + role);
     }

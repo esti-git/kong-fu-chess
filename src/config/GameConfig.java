@@ -18,4 +18,16 @@ public class GameConfig {
     public static final String DB_URL = System.getenv().getOrDefault("DB_URL", "jdbc:sqlite:players.db");
     public static final int STARTING_RATING = 1200;
 
+    public static final String REDIS_URL = System.getenv().getOrDefault("REDIS_URL", "redis://localhost:6379");
+    public static final String SHARD_ID = System.getenv().getOrDefault("SHARD_ID", "shard-1");
+
+    public static final String KEY_PREFIX = "kfc:player:";
+
+    public static final String DEFAULT_WS_PORT = "ws://localhost:8887";
+    public static final String DEFAULT_HTTP_PORT = "http://localhost:8080";
+
+
+
+
+
 }
