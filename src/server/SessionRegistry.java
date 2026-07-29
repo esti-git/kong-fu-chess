@@ -20,4 +20,13 @@ public class SessionRegistry {
     public void remove(WebSocket conn) {
         sessionsByConn.remove(conn);
     }
+
+    public WebSocket findConnByUsername(String username) {
+        for (Map.Entry<WebSocket, PlayerSession> entry : sessionsByConn.entrySet()) {
+            if (entry.getValue().getUsername().equals(username)) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
 }

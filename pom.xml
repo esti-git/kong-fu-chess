@@ -132,6 +132,22 @@
                         </transformers>
                     </configuration>
                 </execution>
+                <execution>
+                    <id>matchmaker-shade</id>
+                    <phase>package</phase>
+                    <goals>
+                        <goal>shade</goal>
+                    </goals>
+                    <configuration>
+                        <finalName>kungfuchess-matchmaker</finalName>
+                        <transformers>
+                            <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                <mainClass>matchmaker.MatchmakerMain</mainClass>
+                            </transformer>
+                            <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
+                        </transformers>
+                    </configuration>
+                </execution>
             </executions>
         </plugin>
     </plugins>

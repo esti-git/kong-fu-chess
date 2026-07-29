@@ -30,6 +30,9 @@ public class GameConfig {
     public static final int GATEWAY_PORT = Integer.parseInt(System.getenv().getOrDefault("GATEWAY_PORT", "8887"));
     public static final String GAME_SERVER_URL = System.getenv().getOrDefault("GAME_SERVER_URL", "ws://localhost:8887");
 
+    public static final int MATCHMAKER_PORT = Integer.parseInt(System.getenv().getOrDefault("MATCHMAKER_PORT", "8081"));
+    public static final String MATCHMAKER_URL = System.getenv().getOrDefault("MATCHMAKER_URL", "http://localhost:8081");
+    public static final String QUEUE_KEY = "kfc:matchqueue";
 
 
 

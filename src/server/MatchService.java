@@ -39,19 +39,29 @@ public class MatchService {
             Map.Entry<WebSocket, PlayerSession> second = pair.get(1);
             matchmaker.remove(first.getKey());
             matchmaker.remove(second.getKey());
-
-            PlayerSession newWhite = first.getValue();
-            PlayerSession newBlack = second.getValue();
-            assignAndActivate(newWhite, PieceColor.WHITE);
-            assignAndActivate(newBlack, PieceColor.BLACK);
-
-            Room room = roomRegistry.createRoom(repository, scheduler);
-            room.seatMatch(first.getKey(), newWhite, second.getKey(), newBlack);
-            roomRegistry.bind(first.getKey(), room.roomId);
-            roomRegistry.bind(second.getKey(), room.roomId);
-            playerRegistry.markInRoom(newWhite.getUsername(), GameConfig.SHARD_ID, room.roomId);
-            playerRegistry.markInRoom(newBlack.getUsername(), GameConfig.SHARD_ID, room.roomId);
-            ServerLog.info("Matched " + newWhite.getUsername() + " vs " + newBlack.getUsername() + " into room " + room.roomId);
+            seatPair(first.getKey(), first.getValue(), second.getKey(), second.getValue());
         }
+    }
+
+    /**
+     * Seats a pair the standalone Matchmaker service has already decided on (see
+     * {@link MatchmakerClient}). Both players are assumed to already be connected to this
+     * shard, which is guaranteed while there is only a single shard.
+     */
+    public void seatMatchedPair(WebSocket connA, PlayerSession sessionA, WebSocket connB, PlayerSession sessionB) {
+        seatPair(connA, sessionA, connB, sessionB);
+    }
+
+    private void seatPair(WebSocket connWhite, PlayerSession newWhite, WebSocket connBlack, PlayerSession newBlack) {
+        assignAndActivate(newWhite, PieceColor.WHITE);
+        assignAndActivate(newBlack, PieceColor.BLACK);
+
+        Room room = roomRegistry.createRoom(repository, scheduler);
+        room.seatMatch(connWhite, newWhite, connBlack, newBlack);
+        roomRegistry.bind(connWhite, room.roomId);
+        roomRegistry.bind(connBlack, room.roomId);
+        playerRegistry.markInRoom(newWhite.getUsername(), GameConfig.SHARD_ID, room.roomId);
+        playerRegistry.markInRoom(newBlack.getUsername(), GameConfig.SHARD_ID, room.roomId);
+        ServerLog.info("Matched " + newWhite.getUsername() + " vs " + newBlack.getUsername() + " into room " + room.roomId);
     }
 }

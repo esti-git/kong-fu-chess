@@ -16,7 +16,7 @@ public class PlayerSession {
     @Setter
     private int rating;
     @Setter
-    private SessionState state = SessionState.IDLE;
+    private volatile SessionState state = SessionState.IDLE;
     @Setter
     private ScheduledFuture<?> disconnectTimer;
 
