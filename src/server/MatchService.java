@@ -16,15 +16,17 @@ public class MatchService {
     private final PlayerRepository repository;
     private final ScheduledExecutorService scheduler;
     private final PlayerRegistry playerRegistry;
+    private final AllocatorClient allocatorClient;
 
     public MatchService(Matchmaker matchmaker, RoomRegistry roomRegistry,
                          PlayerRepository repository, ScheduledExecutorService scheduler,
-                         PlayerRegistry playerRegistry) {
+                         PlayerRegistry playerRegistry, AllocatorClient allocatorClient) {
         this.matchmaker = matchmaker;
         this.roomRegistry = roomRegistry;
         this.repository = repository;
         this.scheduler = scheduler;
         this.playerRegistry = playerRegistry;
+        this.allocatorClient = allocatorClient;
     }
 
     public static void assignAndActivate(PlayerSession session, PieceColor color) {
@@ -43,11 +45,6 @@ public class MatchService {
         }
     }
 
-    /**
-     * Seats a pair the standalone Matchmaker service has already decided on (see
-     * {@link MatchmakerClient}). Both players are assumed to already be connected to this
-     * shard, which is guaranteed while there is only a single shard.
-     */
     public void seatMatchedPair(WebSocket connA, PlayerSession sessionA, WebSocket connB, PlayerSession sessionB) {
         seatPair(connA, sessionA, connB, sessionB);
     }
@@ -60,8 +57,14 @@ public class MatchService {
         room.seatMatch(connWhite, newWhite, connBlack, newBlack);
         roomRegistry.bind(connWhite, room.roomId);
         roomRegistry.bind(connBlack, room.roomId);
-        playerRegistry.markInRoom(newWhite.getUsername(), GameConfig.SHARD_ID, room.roomId);
-        playerRegistry.markInRoom(newBlack.getUsername(), GameConfig.SHARD_ID, room.roomId);
+
+        String hostingShardId = allocatorClient.allocateOrDefault();
+        if (!hostingShardId.equals(GameConfig.SHARD_ID)) {
+            ServerLog.warn("Allocator assigned room " + room.roomId + " to " + hostingShardId
+                    + " but it is hosted locally on " + GameConfig.SHARD_ID + " (cross-shard placement not yet supported)");
+        }
+        playerRegistry.markInRoom(newWhite.getUsername(), hostingShardId, room.roomId);
+        playerRegistry.markInRoom(newBlack.getUsername(), hostingShardId, room.roomId);
         ServerLog.info("Matched " + newWhite.getUsername() + " vs " + newBlack.getUsername() + " into room " + room.roomId);
     }
 }

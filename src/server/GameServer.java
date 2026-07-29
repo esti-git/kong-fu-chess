@@ -9,6 +9,7 @@ import config.GameConfig;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class GameServer extends WebSocketServer {
 
@@ -27,11 +28,17 @@ public class GameServer extends WebSocketServer {
     public GameServer(int port, PlayerRepository repository) {
         super(new InetSocketAddress(port));
         PlayerRegistry playerRegistry = new RedisPlayerRegistry(GameConfig.REDIS_URL);
+        ShardRegistry shardRegistry = new ShardRegistry(GameConfig.REDIS_URL);
         Matchmaker matchmaker = new Matchmaker(scheduler);
-        MatchService matchService = new MatchService(matchmaker, roomRegistry, repository, scheduler, playerRegistry);
         MatchmakerClient matchmakerClient = new MatchmakerClient(GameConfig.MATCHMAKER_URL);
+        AllocatorClient allocatorClient = new AllocatorClient(GameConfig.ALLOCATOR_URL);
+        MatchService matchService = new MatchService(matchmaker, roomRegistry, repository, scheduler, playerRegistry, allocatorClient);
         this.controller = new ServerController(repository, new SessionRegistry(), matchmaker, roomRegistry,
-                matchService, scheduler, playerRegistry, matchmakerClient);
+                matchService, scheduler, playerRegistry, matchmakerClient, allocatorClient);
+
+        scheduler.scheduleAtFixedRate(
+                () -> shardRegistry.registerHeartbeat(GameConfig.SHARD_ID, GameConfig.GAME_SERVER_HOST, roomRegistry.allRooms().size()),
+                0, GameConfig.SHARD_HEARTBEAT_SECONDS, TimeUnit.SECONDS);
     }
 
     @Override

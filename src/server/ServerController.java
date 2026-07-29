@@ -27,12 +27,13 @@ public class ServerController {
     private final ScheduledExecutorService scheduler;
     private final PlayerRegistry playerRegistry;
     private final MatchmakerClient matchmakerClient;
+    private final AllocatorClient allocatorClient;
     private final Map<WebSocket, ScheduledFuture<?>> remoteSeekTimeouts = new ConcurrentHashMap<>();
     private final Object lock = new Object();
 
     public ServerController(PlayerRepository repository, SessionRegistry sessionRegistry, Matchmaker matchmaker,
             RoomRegistry roomRegistry, MatchService matchService, ScheduledExecutorService scheduler,
-            PlayerRegistry playerRegistry, MatchmakerClient matchmakerClient) {
+            PlayerRegistry playerRegistry, MatchmakerClient matchmakerClient, AllocatorClient allocatorClient) {
         this.repository = repository;
         this.sessionRegistry = sessionRegistry;
         this.matchmaker = matchmaker;
@@ -41,6 +42,7 @@ public class ServerController {
         this.scheduler = scheduler;
         this.playerRegistry = playerRegistry;
         this.matchmakerClient = matchmakerClient;
+        this.allocatorClient = allocatorClient;
     }
 
     public void handleDisconnect(WebSocket conn) {
@@ -175,12 +177,6 @@ public class ServerController {
         seekAndSeat(conn, session);
     }
 
-    /**
-     * Runs the (blocking, unlocked) matchmaker HTTP round trip for {@code conn}/{@code session}
-     * and seats the result. Used both for a fresh seek and to re-queue an opponent whose match
-     * fell through because the other side disconnected mid-seek (see the {@code selfStillActive}
-     * check below).
-     */
     private void seekAndSeat(WebSocket conn, PlayerSession session) {
         MatchmakerClient.SeekResult result;
         try {
@@ -304,7 +300,13 @@ public class ServerController {
         MatchService.assignAndActivate(session, PieceColor.WHITE);
         room.seatCreator(conn, session);
         roomRegistry.bind(conn, room.roomId);
-        playerRegistry.markInRoom(session.getUsername(), GameConfig.SHARD_ID, room.roomId);
+
+        String hostingShardId = allocatorClient.allocateOrDefault();
+        if (!hostingShardId.equals(GameConfig.SHARD_ID)) {
+            ServerLog.warn("Allocator assigned room " + room.roomId + " to " + hostingShardId
+                    + " but it is hosted locally on " + GameConfig.SHARD_ID + " (cross-shard placement not yet supported)");
+        }
+        playerRegistry.markInRoom(session.getUsername(), hostingShardId, room.roomId);
         conn.send(StateCodec.encodeRoomJoined(room.roomId, PlayerRole.WHITE));
         ServerLog.info(session.getUsername() + " created room " + room.roomId);
     }

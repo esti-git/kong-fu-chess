@@ -34,6 +34,19 @@ services:
     expose:
       - "8081"
 
+  allocator:
+    build:
+      context: .
+      dockerfile: Dockerfile.allocator
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_URL: redis://redis:6379
+      ALLOCATOR_PORT: 8082
+    expose:
+      - "8082"
+
   game-server:
     build: .
     depends_on:
@@ -43,11 +56,13 @@ services:
         condition: service_healthy
       matchmaker:
         condition: service_started
+      allocator:
+        condition: service_started
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/kungfuchess?user=kungfu&password=kungfu
       REDIS_URL: redis://redis:6379
-      SHARD_ID: shard-1
       MATCHMAKER_URL: http://matchmaker:8081
+      ALLOCATOR_URL: http://allocator:8082
     expose:
       - "8887"
 
