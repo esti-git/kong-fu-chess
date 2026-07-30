@@ -44,6 +44,16 @@ public class ShardRegistry {
     public record ShardInfo(String shardId, String host) {
     }
 
+    /** Deregisters a shard immediately (used on graceful shutdown) instead of waiting for TTL expiry. */
+    public void remove(String shardId) {
+        if (jedis == null) return;
+        try {
+            jedis.del(KEY_PREFIX + shardId);
+        } catch (Exception e) {
+            ServerLog.warn("ShardRegistry: remove failed for " + shardId + ": " + e.getMessage());
+        }
+    }
+
     public Optional<ShardInfo> pickLeastLoaded() {
         if (jedis == null) return Optional.empty();
         try {

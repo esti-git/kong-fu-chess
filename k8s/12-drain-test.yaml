@@ -1,0 +1,23 @@
+# Manual verification harness for connection draining (Server_Design.md section 4), not a
+# self-contained pass/fail check like the other test Jobs -- it needs to be paired with an
+# external script that, while this Job's client is holding its room open, identifies the
+# hosting shard (redis-cli hget "kfc:room:<id>" shardId) and deletes that specific game-server
+# pod to trigger the drain. See k8s_migration project memory for the full manual procedure and
+# what to look for (pod stays Terminating while active, /readyz flips to 503, ShardRegistry
+# entry disappears immediately, pod exits shortly after the room's last connection closes).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: drain-test
+  namespace: kungfuchess
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: drain
+          image: kungfuchess-e2e:local
+          imagePullPolicy: IfNotPresent
+          command: ["java", "-cp", "classes:test-classes:libs/*", "DrainTest", "ws://ws-gateway:8887", "40"]

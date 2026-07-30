@@ -9,6 +9,7 @@ import config.GameConfig;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 public class GameServer extends WebSocketServer {
@@ -39,15 +40,55 @@ public class GameServer extends WebSocketServer {
         this.controller = new ServerController(repository, new SessionRegistry(), matchmaker, roomRegistry,
                 matchService, scheduler, playerRegistry, matchmakerClient, allocatorClient);
 
-        scheduler.scheduleAtFixedRate(
+        ScheduledFuture<?> heartbeat = scheduler.scheduleAtFixedRate(
                 () -> shardRegistry.registerHeartbeat(GameConfig.SHARD_ID, GameConfig.GAME_SERVER_HOST, roomRegistry.allRooms().size()),
                 0, GameConfig.SHARD_HEARTBEAT_SECONDS, TimeUnit.SECONDS);
 
+        HealthServer healthServer = null;
         try {
-            new HealthServer(GameConfig.GAME_SERVER_HEALTH_PORT).start();
+            healthServer = new HealthServer(GameConfig.GAME_SERVER_HEALTH_PORT);
+            healthServer.start();
         } catch (Exception e) {
             ServerLog.warn("Failed to start health endpoint on " + GameConfig.GAME_SERVER_HEALTH_PORT + ": " + e.getMessage());
         }
+
+        registerDrainingShutdownHook(healthServer, shardRegistry, heartbeat);
+    }
+
+    /**
+     * On SIGTERM (Kubernetes scale-down/rolling update), stop taking on *new* rooms immediately
+     * -- flip readiness so the Service/Allocator route around this pod, and deregister from
+     * ShardRegistry so it's never picked as "least loaded" again -- but let already-active rooms
+     * (bounded to Server_Design.md's 30-90s game length) finish naturally before the JVM exits,
+     * instead of dropping them mid-game the instant the pod is killed.
+     */
+    private void registerDrainingShutdownHook(HealthServer healthServer, ShardRegistry shardRegistry,
+                                               ScheduledFuture<?> heartbeat) {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            ServerLog.info("Shard " + GameConfig.SHARD_ID + " draining: no new rooms, waiting on "
+                    + roomRegistry.allRooms().size() + " active room(s)");
+            if (healthServer != null) {
+                healthServer.setReady(false);
+            }
+            heartbeat.cancel(false);
+            shardRegistry.remove(GameConfig.SHARD_ID);
+
+            long deadline = System.currentTimeMillis() + GameConfig.DRAIN_TIMEOUT_SECONDS * 1000L;
+            while (!roomRegistry.allRooms().isEmpty() && System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            int remaining = roomRegistry.allRooms().size();
+            if (remaining > 0) {
+                ServerLog.warn("Shard " + GameConfig.SHARD_ID + " drain timed out with " + remaining + " room(s) still active");
+            } else {
+                ServerLog.info("Shard " + GameConfig.SHARD_ID + " drained cleanly, exiting");
+            }
+        }, "drain-shutdown"));
     }
 
     @Override

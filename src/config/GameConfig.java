@@ -58,6 +58,10 @@ public class GameConfig {
     public static final int GATEWAY_HEALTH_PORT = Integer
             .parseInt(System.getenv().getOrDefault("GATEWAY_HEALTH_PORT", "9002"));
 
+    /** Max time a draining shard waits for its active rooms to finish before exiting anyway. */
+    public static final int DRAIN_TIMEOUT_SECONDS = Integer
+            .parseInt(System.getenv().getOrDefault("DRAIN_TIMEOUT_SECONDS", "90"));
+
     public static final String NATS_URL = System.getenv().getOrDefault("NATS_URL", "nats://localhost:4222");
     public static final String ALLOCATOR_INBOX_SUBJECT = System.getenv()
             .getOrDefault("ALLOCATOR_INBOX_SUBJECT", "allocator.inbox");

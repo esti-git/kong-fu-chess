@@ -5,6 +5,13 @@ metadata:
   namespace: kungfuchess
 spec:
   clusterIP: None
+  # Keep publishing a draining pod's per-pod DNS name even after its readiness probe fails.
+  # ws-gateway addresses shards individually via ShardRegistry, not through this Service's
+  # load-balancing, so a draining-but-still-alive shard must stay resolvable here for players
+  # reconnecting to (or cross-shard-joining) a room it's still hosting during the drain window
+  # -- only the plain "game-server" Service below (blind fallback traffic) should actually stop
+  # routing to it, which normal readiness-gated endpoints already handle.
+  publishNotReadyAddresses: true
   selector:
     app: game-server
   ports:
@@ -29,6 +36,9 @@ spec:
         app: game-server
     spec:
       enableServiceLinks: false
+      # Longer than DRAIN_TIMEOUT_SECONDS (90s default) so Kubernetes waits for the graceful
+      # shutdown hook to finish draining active rooms before SIGKILL-ing the container.
+      terminationGracePeriodSeconds: 100
       containers:
         - name: game-server
           image: kungfuchess-game-server:local
@@ -72,7 +82,7 @@ spec:
             failureThreshold: 10
           readinessProbe:
             httpGet:
-              path: /healthz
+              path: /readyz
               port: 9001
             periodSeconds: 5
             timeoutSeconds: 5
