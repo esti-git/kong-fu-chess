@@ -1,0 +1,21 @@
+# Load test per Server_Design.md section 5. Not a strict pass/fail gate like the other test
+# Jobs -- the interesting output is watching `kubectl get hpa,pods -n kungfuchess -w` and the
+# game-server logs while it runs, to see the real system (matchmaker/allocator/room-count HPA)
+# react under concurrent load, not just the final summary line.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: load-test
+  namespace: kungfuchess
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: Never
+      enableServiceLinks: false
+      containers:
+        - name: load
+          image: kungfuchess-e2e:load1
+          imagePullPolicy: IfNotPresent
+          command: ["java", "-cp", "classes:test-classes:libs/*", "LoadTest", "ws://ws-gateway:8887", "25", "20"]
