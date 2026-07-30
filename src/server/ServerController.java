@@ -283,13 +283,13 @@ public class ServerController {
         String normalizedId = RoomRegistry.normalizeRoomId(desiredRoomId);
         Room room;
         if (normalizedId.isEmpty()) {
-            room = roomRegistry.createRoom(repository, scheduler);
+            room = roomRegistry.createRoom(scheduler);
         } else if (normalizedId.length() > MAX_ROOM_NAME_LENGTH) {
             ServerLog.warn("Create room rejected: name too long (" + normalizedId.length() + " chars)");
             conn.send(StateCodec.encodeRoomError("Room name is too long (max " + MAX_ROOM_NAME_LENGTH + " characters)."));
             return;
         } else {
-            room = roomRegistry.createRoomWithId(normalizedId, repository, scheduler);
+            room = roomRegistry.createRoomWithId(normalizedId, scheduler);
             if (room == null) {
                 ServerLog.warn("Create room rejected: \"" + normalizedId + "\" already in use");
                 conn.send(StateCodec.encodeRoomError("Room name \"" + normalizedId + "\" is already in use."));

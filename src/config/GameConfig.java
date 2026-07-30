@@ -62,6 +62,10 @@ public class GameConfig {
     public static final int DRAIN_TIMEOUT_SECONDS = Integer
             .parseInt(System.getenv().getOrDefault("DRAIN_TIMEOUT_SECONDS", "90"));
 
+    public static final String GAME_RESULT_SUBJECT = System.getenv().getOrDefault("GAME_RESULT_SUBJECT", "game.results");
+    public static final String GAME_RESULT_STREAM = "GAME_RESULTS";
+    public static final String GAME_RESULT_CONSUMER = "game-result-workers";
+
     public static final String NATS_URL = System.getenv().getOrDefault("NATS_URL", "nats://localhost:4222");
     public static final String ALLOCATOR_INBOX_SUBJECT = System.getenv()
             .getOrDefault("ALLOCATOR_INBOX_SUBJECT", "allocator.inbox");

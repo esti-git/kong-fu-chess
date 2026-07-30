@@ -23,7 +23,7 @@ services:
 
   nats:
     image: nats:2-alpine
-    command: ["-m", "8222"]
+    command: ["-js", "-m", "8222"]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
       interval: 5s

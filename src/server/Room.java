@@ -42,7 +42,7 @@ public class Room {
     private final RatingService ratingService;
     private final BoardSnapshotFactory snapshotFactory;
     private final ScheduledExecutorService scheduler;
-    private final GameRepository gameRepository;
+    private final GameResultQueue resultQueue;
     private final RoomLocationRegistry roomLocationRegistry;
     private final long createdAt = System.currentTimeMillis();
     private final Object engineLock = new Object();
@@ -56,13 +56,13 @@ public class Room {
     private WebSocket blackConn;
     private final Map<WebSocket, PlayerSession> spectators = new LinkedHashMap<>();
 
-    public Room(String roomId, PlayerRepository repository, ScheduledExecutorService scheduler,
-            BoardSnapshotFactory snapshotFactory, GameRepository gameRepository, RoomLocationRegistry roomLocationRegistry) {
+    public Room(String roomId, ScheduledExecutorService scheduler,
+            BoardSnapshotFactory snapshotFactory, GameResultQueue resultQueue, RoomLocationRegistry roomLocationRegistry) {
         this.roomId = roomId;
-        this.ratingService = new RatingService(repository);
+        this.ratingService = new RatingService();
         this.scheduler = scheduler;
         this.snapshotFactory = snapshotFactory;
-        this.gameRepository = gameRepository;
+        this.resultQueue = resultQueue;
         this.roomLocationRegistry = roomLocationRegistry;
 
         this.factory = new GameFactory();
@@ -279,10 +279,20 @@ public class Room {
         ServerLog.info("Room " + roomId + ": game ended, winner=" + winnerColor
                 + ", ratings now white=" + whiteSession.getRating() + " black=" + blackSession.getRating());
 
-        if (gameRepository != null) {
-            gameRepository.recordGame(roomId, whiteUsername, blackUsername, winnerColor.name(),
-                    whiteRatingBefore, whiteSession.getRating(), blackRatingBefore, blackSession.getRating(),
-                    createdAt, System.currentTimeMillis(), serializeEventHistory());
+        if (resultQueue != null) {
+            JSONObject result = new JSONObject()
+                    .put("roomId", roomId)
+                    .put("whiteUsername", whiteUsername)
+                    .put("blackUsername", blackUsername)
+                    .put("winnerColor", winnerColor.name())
+                    .put("whiteRatingBefore", whiteRatingBefore)
+                    .put("whiteRatingAfter", whiteSession.getRating())
+                    .put("blackRatingBefore", blackRatingBefore)
+                    .put("blackRatingAfter", blackSession.getRating())
+                    .put("startedAt", createdAt)
+                    .put("endedAt", System.currentTimeMillis())
+                    .put("eventsJson", serializeEventHistory());
+            resultQueue.publish(result);
         }
 
         broadcastAssignments();

@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: e2e-smoke-test
+  name: queue-test
   namespace: kungfuchess
 spec:
   backoffLimit: 0
@@ -11,7 +11,7 @@ spec:
       restartPolicy: Never
       enableServiceLinks: false
       containers:
-        - name: e2e
+        - name: queue
           image: kungfuchess-e2e:local
           imagePullPolicy: IfNotPresent
-          args: ["http://api-gateway:8080", "ws://ws-gateway:8887"]
+          command: ["java", "-cp", "classes:test-classes:libs/*", "GameResultQueueTest", "http://api-gateway:8080", "nats://nats:4222"]

@@ -34,7 +34,7 @@ class RoomTest {
     }
 
     private Room newRoom(PlayerRepository repository) {
-        return registry.createRoom(repository, scheduler);
+        return registry.createRoom(scheduler);
     }
 
     private GameEngine engineOf(Room room) throws Exception {

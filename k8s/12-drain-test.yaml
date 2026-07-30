@@ -16,6 +16,7 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      enableServiceLinks: false
       containers:
         - name: drain
           image: kungfuchess-e2e:local

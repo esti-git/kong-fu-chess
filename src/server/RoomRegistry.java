@@ -18,15 +18,15 @@ public class RoomRegistry {
     private final Map<String, Room> rooms = new ConcurrentHashMap<>();
     private final Map<WebSocket, String> roomIdByConn = new ConcurrentHashMap<>();
     private final BoardSnapshotFactory snapshotFactory = new BoardSnapshotFactory();
-    private final GameRepository gameRepository;
+    private final GameResultQueue resultQueue;
     private final RoomLocationRegistry roomLocationRegistry;
 
     public RoomRegistry() {
         this(null, null);
     }
 
-    public RoomRegistry(GameRepository gameRepository, RoomLocationRegistry roomLocationRegistry) {
-        this.gameRepository = gameRepository;
+    public RoomRegistry(GameResultQueue resultQueue, RoomLocationRegistry roomLocationRegistry) {
+        this.resultQueue = resultQueue;
         this.roomLocationRegistry = roomLocationRegistry;
     }
 
@@ -34,19 +34,19 @@ public class RoomRegistry {
         return raw == null ? "" : raw.trim().toUpperCase();
     }
 
-    public Room createRoom(PlayerRepository repository, ScheduledExecutorService scheduler) {
+    public Room createRoom(ScheduledExecutorService scheduler) {
         String roomId;
         Room room;
         do {
             roomId = generateId();
-            room = new Room(roomId, repository, scheduler, snapshotFactory, gameRepository, roomLocationRegistry);
+            room = new Room(roomId, scheduler, snapshotFactory, resultQueue, roomLocationRegistry);
         } while (rooms.putIfAbsent(roomId, room) != null);
         ServerLog.info("Room " + roomId + " created");
         return room;
     }
 
-    public Room createRoomWithId(String roomId, PlayerRepository repository, ScheduledExecutorService scheduler) {
-        Room room = new Room(roomId, repository, scheduler, snapshotFactory, gameRepository, roomLocationRegistry);
+    public Room createRoomWithId(String roomId, ScheduledExecutorService scheduler) {
+        Room room = new Room(roomId, scheduler, snapshotFactory, resultQueue, roomLocationRegistry);
         boolean created = rooms.putIfAbsent(roomId, room) == null;
         if (created) {
             ServerLog.info("Room " + roomId + " created");

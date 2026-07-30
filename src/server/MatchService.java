@@ -53,7 +53,7 @@ public class MatchService {
         assignAndActivate(newWhite, PieceColor.WHITE);
         assignAndActivate(newBlack, PieceColor.BLACK);
 
-        Room room = roomRegistry.createRoom(repository, scheduler);
+        Room room = roomRegistry.createRoom(scheduler);
         room.seatMatch(connWhite, newWhite, connBlack, newBlack);
         roomRegistry.bind(connWhite, room.roomId);
         roomRegistry.bind(connBlack, room.roomId);

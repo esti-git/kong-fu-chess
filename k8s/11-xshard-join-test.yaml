@@ -9,6 +9,7 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      enableServiceLinks: false
       containers:
         - name: xshard
           image: kungfuchess-e2e:local

@@ -30,7 +30,9 @@ public class GameServer extends WebSocketServer {
         super(new InetSocketAddress(port));
         GameRepository gameRepository = new GameRepository(repository.getJdbcUrl());
         RoomLocationRegistry roomLocationRegistry = new RoomLocationRegistry(GameConfig.REDIS_URL);
-        this.roomRegistry = new RoomRegistry(gameRepository, roomLocationRegistry);
+        GameResultQueue resultQueue = new GameResultQueue(GameConfig.NATS_URL);
+        this.roomRegistry = new RoomRegistry(resultQueue, roomLocationRegistry);
+        new GameResultWorker(GameConfig.NATS_URL, repository, gameRepository);
         PlayerRegistry playerRegistry = new RedisPlayerRegistry(GameConfig.REDIS_URL);
         ShardRegistry shardRegistry = new ShardRegistry(GameConfig.REDIS_URL);
         Matchmaker matchmaker = new Matchmaker(scheduler);

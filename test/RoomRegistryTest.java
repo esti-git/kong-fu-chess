@@ -1,7 +1,6 @@
 import org.java_websocket.WebSocket;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import server.PlayerRepository;
 import server.Room;
 import server.RoomRegistry;
 
@@ -13,7 +12,6 @@ import static org.junit.jupiter.api.Assertions.*;
 class RoomRegistryTest {
 
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-    private final PlayerRepository repository = new PlayerRepository("jdbc:sqlite::memory:");
     private final RoomRegistry registry = new RoomRegistry();
 
     @AfterEach
@@ -23,7 +21,7 @@ class RoomRegistryTest {
 
     @Test
     void testCreateRoomGeneratesRetrievableRoom() {
-        Room room = registry.createRoom(repository, scheduler);
+        Room room = registry.createRoom(scheduler);
 
         assertNotNull(room);
         assertNotNull(registry.get(room.roomId));
@@ -32,7 +30,7 @@ class RoomRegistryTest {
 
     @Test
     void testCreateRoomWithIdSucceedsOnce() {
-        Room room = registry.createRoomWithId("MYROOM", repository, scheduler);
+        Room room = registry.createRoomWithId("MYROOM", scheduler);
 
         assertNotNull(room);
         assertEquals("MYROOM", room.roomId);
@@ -40,8 +38,8 @@ class RoomRegistryTest {
 
     @Test
     void testCreateRoomWithIdReturnsNullOnDuplicate() {
-        registry.createRoomWithId("MYROOM", repository, scheduler);
-        Room duplicate = registry.createRoomWithId("MYROOM", repository, scheduler);
+        registry.createRoomWithId("MYROOM", scheduler);
+        Room duplicate = registry.createRoomWithId("MYROOM", scheduler);
 
         assertNull(duplicate);
     }
@@ -53,7 +51,7 @@ class RoomRegistryTest {
 
     @Test
     void testBindAndRoomForReturnsBoundRoom() {
-        Room room = registry.createRoom(repository, scheduler);
+        Room room = registry.createRoom(scheduler);
         WebSocket conn = new FakeWebSocket().socket();
 
         registry.bind(conn, room.roomId);
@@ -63,7 +61,7 @@ class RoomRegistryTest {
 
     @Test
     void testUnbindClearsBinding() {
-        Room room = registry.createRoom(repository, scheduler);
+        Room room = registry.createRoom(scheduler);
         WebSocket conn = new FakeWebSocket().socket();
         registry.bind(conn, room.roomId);
 
@@ -80,7 +78,7 @@ class RoomRegistryTest {
 
     @Test
     void testRemoveIfEmptyRemovesOnlyEmptyRooms() {
-        Room room = registry.createRoom(repository, scheduler);
+        Room room = registry.createRoom(scheduler);
         FakeWebSocket white = new FakeWebSocket();
         room.seatCreator(white.socket(), new server.PlayerSession("alice", 1200));
 
@@ -94,8 +92,8 @@ class RoomRegistryTest {
 
     @Test
     void testAllRoomsReflectsCreatedRooms() {
-        Room roomA = registry.createRoom(repository, scheduler);
-        Room roomB = registry.createRoom(repository, scheduler);
+        Room roomA = registry.createRoom(scheduler);
+        Room roomB = registry.createRoom(scheduler);
 
         assertTrue(registry.allRooms().contains(roomA));
         assertTrue(registry.allRooms().contains(roomB));
