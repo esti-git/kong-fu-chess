@@ -49,6 +49,7 @@ public class GameServer extends WebSocketServer {
         HealthServer healthServer = null;
         try {
             healthServer = new HealthServer(GameConfig.GAME_SERVER_HEALTH_PORT);
+            healthServer.registerGauge("kfc_game_server_active_rooms", () -> roomRegistry.allRooms().size());
             healthServer.start();
         } catch (Exception e) {
             ServerLog.warn("Failed to start health endpoint on " + GameConfig.GAME_SERVER_HEALTH_PORT + ": " + e.getMessage());

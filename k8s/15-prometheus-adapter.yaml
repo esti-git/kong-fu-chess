@@ -1,0 +1,171 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: custom-metrics-apiserver
+  namespace: kungfuchess
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: custom-metrics:system:auth-delegator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: custom-metrics-apiserver
+    namespace: kungfuchess
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: custom-metrics-auth-reader
+  namespace: kube-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+  - kind: ServiceAccount
+    name: custom-metrics-apiserver
+    namespace: kungfuchess
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: custom-metrics-resource-reader
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces", "pods", "services"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: custom-metrics-resource-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: custom-metrics-resource-reader
+subjects:
+  - kind: ServiceAccount
+    name: custom-metrics-apiserver
+    namespace: kungfuchess
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: custom-metrics-server-resources
+rules:
+  - apiGroups: ["custom.metrics.k8s.io"]
+    resources: ["*"]
+    verbs: ["*"]
+---
+# Grants read access to the custom metrics API broadly (system:authenticated) instead of
+# targeting the HPA controller's exact identity, which varies across cluster distros/versions
+# and isn't worth chasing for this project's local-dev-cluster scope -- fine here since nothing
+# outside this cluster can reach it; a real deployment would bind this to the specific
+# kube-controller-manager identity instead.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: custom-metrics-server-resources-authenticated
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: custom-metrics-server-resources
+subjects:
+  - kind: Group
+    name: system:authenticated
+    apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: adapter-config
+  namespace: kungfuchess
+data:
+  config.yaml: |
+    rules:
+      # Maps the Prometheus gauge each game-server shard exposes on /metrics to a per-pod
+      # Kubernetes custom metric the HPA can target -- the actual point of this whole file,
+      # per Server_Design.md section 4 ("autoscale by rooms active, not CPU").
+      - seriesQuery: 'kfc_game_server_active_rooms{namespace!="",pod!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+            pod: {resource: "pod"}
+        name:
+          matches: "kfc_game_server_active_rooms"
+          as: "kfc_game_server_active_rooms"
+        metricsQuery: 'avg_over_time(<<.Series>>{<<.LabelMatchers>>}[1m])'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: custom-metrics-apiserver
+  namespace: kungfuchess
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: custom-metrics-apiserver
+  template:
+    metadata:
+      labels:
+        app: custom-metrics-apiserver
+    spec:
+      serviceAccountName: custom-metrics-apiserver
+      containers:
+        - name: custom-metrics-apiserver
+          image: registry.k8s.io/prometheus-adapter/prometheus-adapter:v0.12.0
+          args:
+            - --secure-port=6443
+            - --prometheus-url=http://prometheus.kungfuchess.svc:9090/
+            - --metrics-relist-interval=30s
+            - --config=/etc/adapter/config.yaml
+            # Default working directory isn't writable by the container's non-root user; the
+            # adapter needs somewhere to generate its self-signed serving certificate.
+            - --cert-dir=/tmp/certs
+          ports:
+            - containerPort: 6443
+          volumeMounts:
+            - name: config
+              mountPath: /etc/adapter
+            - name: certs
+              mountPath: /tmp/certs
+      volumes:
+        - name: config
+          configMap:
+            name: adapter-config
+        - name: certs
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: custom-metrics-apiserver
+  namespace: kungfuchess
+spec:
+  ports:
+    - port: 443
+      targetPort: 6443
+  selector:
+    app: custom-metrics-apiserver
+---
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1beta1.custom.metrics.k8s.io
+spec:
+  service:
+    name: custom-metrics-apiserver
+    namespace: kungfuchess
+  group: custom.metrics.k8s.io
+  version: v1beta1
+  # Skips validating the adapter's serving certificate -- traffic stays inside the cluster
+  # network; a real deployment would supply a proper CA bundle instead.
+  insecureSkipTLSVerify: true
+  groupPriorityMinimum: 100
+  versionPriority: 100

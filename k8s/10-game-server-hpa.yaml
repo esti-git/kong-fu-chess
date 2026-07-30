@@ -11,12 +11,18 @@ spec:
   minReplicas: 2
   maxReplicas: 5
   metrics:
-    - type: Resource
-      resource:
-        name: cpu
+    # Server_Design.md section 4: autoscale by "how many rooms are active right now", not CPU
+    # -- each game-server pod hosts many short-lived (30-90s) games at once, so room count is
+    # the signal that actually tracks load. Backed by kfc_game_server_active_rooms (exposed on
+    # /metrics, scraped by Prometheus, surfaced here via prometheus-adapter's custom.metrics.k8s.io
+    # API). Target of 3 means: once pods are averaging more than 3 active rooms each, scale out.
+    - type: Pods
+      pods:
+        metric:
+          name: kfc_game_server_active_rooms
         target:
-          type: Utilization
-          averageUtilization: 50
+          type: AverageValue
+          averageValue: "3"
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 60
