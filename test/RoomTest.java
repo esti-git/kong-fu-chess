@@ -296,12 +296,13 @@ class RoomTest {
     }
 
     @Test
-    void testApplyEloOnGameEndUpdatesRatingsAndPersists() throws Exception {
-        PlayerRepository repository = newRepository();
-        repository.loginOrRegister("alice", "pw1");
-        repository.loginOrRegister("bob", "pw2");
-
-        Room room = newRoom(repository);
+    void testApplyEloOnGameEndUpdatesInMemoryRatings() throws Exception {
+        // Persisting the new rating is now decoupled onto GameResultQueue/GameResultWorker
+        // (NATS JetStream) rather than written synchronously here -- see GameResultQueueTest for
+        // the integration-level check that a published result actually lands in Postgres. This
+        // test covers what Room still guarantees synchronously: the in-memory session rating
+        // players see immediately when their game ends.
+        Room room = newRoom(newRepository());
         FakeWebSocket white = new FakeWebSocket();
         FakeWebSocket black = new FakeWebSocket();
         PlayerSession whiteSession = new PlayerSession("alice", 1200);
@@ -312,9 +313,6 @@ class RoomTest {
 
         assertTrue(whiteSession.getRating() > 1200);
         assertTrue(blackSession.getRating() < 1200);
-
-        var persistedWinner = repository.loginOrRegister("alice", "pw1");
-        assertEquals(whiteSession.getRating(), persistedWinner.rating);
     }
 
     @Test

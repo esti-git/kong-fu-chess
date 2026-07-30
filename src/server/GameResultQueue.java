@@ -29,18 +29,21 @@ import java.nio.charset.StandardCharsets;
  */
 public class GameResultQueue {
 
+    private final Connection connection;
     private final JetStream jetStream;
 
     public GameResultQueue(String natsUrl) {
+        Connection conn = null;
         JetStream js = null;
         try {
-            Connection connection = NatsConnections.connect(natsUrl);
-            JetStreamManagement jsm = connection.jetStreamManagement();
+            conn = NatsConnections.connect(natsUrl);
+            JetStreamManagement jsm = conn.jetStreamManagement();
             ensureStream(jsm);
-            js = connection.jetStream();
+            js = conn.jetStream();
         } catch (Exception e) {
             ServerLog.warn("GameResultQueue: JetStream unavailable, results will not be persisted: " + e.getMessage());
         }
+        this.connection = conn;
         this.jetStream = js;
     }
 
@@ -65,6 +68,16 @@ public class GameResultQueue {
             jetStream.publish(GameConfig.GAME_RESULT_SUBJECT, result.toString().getBytes(StandardCharsets.UTF_8));
         } catch (Exception e) {
             ServerLog.error("GameResultQueue: failed to publish result " + result, e);
+        }
+    }
+
+    /** Closes the underlying NATS connection -- only needed by short-lived callers (tests/CLI tools); GameServer keeps this open for its lifetime. */
+    public void close() {
+        if (connection == null) return;
+        try {
+            connection.close();
+        } catch (Exception e) {
+            ServerLog.warn("GameResultQueue: failed to close NATS connection: " + e.getMessage());
         }
     }
 }

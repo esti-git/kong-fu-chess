@@ -12,6 +12,6 @@ spec:
       enableServiceLinks: false
       containers:
         - name: queue
-          image: kungfuchess-e2e:local
+          image: kungfuchess-e2e:final-v2
           imagePullPolicy: IfNotPresent
           command: ["java", "-cp", "classes:test-classes:libs/*", "GameResultQueueTest", "http://api-gateway:8080", "nats://nats:4222"]

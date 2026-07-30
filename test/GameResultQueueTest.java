@@ -53,6 +53,7 @@ public class GameResultQueueTest {
 
         GameResultQueue queue = new GameResultQueue(natsUrl);
         queue.publish(result);
+        queue.close();
 
         System.out.println("PUBLISHED roomId=" + roomId + " white=" + white + " (expect rating -> " + whiteAfter + ")"
                 + " black=" + black + " (expect rating -> " + blackAfter + ")");

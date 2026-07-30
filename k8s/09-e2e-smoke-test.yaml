@@ -12,6 +12,6 @@ spec:
       enableServiceLinks: false
       containers:
         - name: e2e
-          image: kungfuchess-e2e:local
+          image: kungfuchess-e2e:final-v2
           imagePullPolicy: IfNotPresent
           args: ["http://api-gateway:8080", "ws://ws-gateway:8887"]

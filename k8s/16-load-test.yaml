@@ -16,6 +16,6 @@ spec:
       enableServiceLinks: false
       containers:
         - name: load
-          image: kungfuchess-e2e:load1
+          image: kungfuchess-e2e:final-v2
           imagePullPolicy: IfNotPresent
           command: ["java", "-cp", "classes:test-classes:libs/*", "LoadTest", "ws://ws-gateway:8887", "25", "20"]
