@@ -1,0 +1,16 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: xshard-join-test
+  namespace: kungfuchess
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: xshard
+          image: kungfuchess-e2e:local
+          imagePullPolicy: IfNotPresent
+          command: ["java", "-cp", "classes:test-classes:libs/*", "CrossShardJoinTest", "ws://ws-gateway:8887"]

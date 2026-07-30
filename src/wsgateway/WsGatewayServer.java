@@ -9,6 +9,9 @@ import server.AllocatorClient;
 import server.HealthServer;
 import server.PlayerLocation;
 import server.PlayerRegistry;
+import server.RoomLocationRegistry;
+import server.RoomRegistry;
+import server.RoomSummary;
 import server.ShardRegistry;
 import server.logging.ServerLog;
 
@@ -25,28 +28,44 @@ import java.util.concurrent.ConcurrentHashMap;
  * {@code IN_ROOM} is routed to that room's shard (via {@link ShardRegistry}); anyone else is
  * routed to whatever the Game Allocator currently reports as least loaded. Everything after
  * that first message is relayed verbatim through {@link UpstreamProxyClient} — the gateway
- * never parses gameplay traffic, only the one message it needs to make a routing decision.
- *
- * <p>Known limitation, not yet solved: a client joining an EXISTING room by room code (not
- * their own, not a reconnect) is routed the same way as any fresh login — to the least-loaded
- * shard, not necessarily the one actually hosting that room. That requires a room-id-to-shard
- * lookup this phase doesn't add. Harmless while only one shard runs; a real gap once there are
- * several.
+ * never parses gameplay traffic, except {@code joinRoom}, which it peeks at to catch a client
+ * joining an EXISTING room hosted on a *different* shard than the one it happened to land on
+ * (fresh login or spectate-by-code, not a reconnect): the gateway looks the room up in
+ * {@link RoomLocationRegistry} and, if it lives elsewhere, silently migrates the connection to
+ * the correct shard (replaying the original login) before forwarding the joinRoom itself.
  */
 public class WsGatewayServer extends WebSocketServer {
 
     private final String fallbackGameServerUrl;
     private final PlayerRegistry playerRegistry;
     private final ShardRegistry shardRegistry;
+    private final RoomLocationRegistry roomLocationRegistry;
     private final AllocatorClient allocatorClient;
-    private final Map<WebSocket, UpstreamProxyClient> upstreams = new ConcurrentHashMap<>();
+    private final Map<WebSocket, Route> routes = new ConcurrentHashMap<>();
+
+    private record Resolution(String host, String shardId) {
+    }
+
+    private static final class Route {
+        final UpstreamProxyClient upstream;
+        final String shardId;
+        final String loginMessage;
+
+        Route(UpstreamProxyClient upstream, String shardId, String loginMessage) {
+            this.upstream = upstream;
+            this.shardId = shardId;
+            this.loginMessage = loginMessage;
+        }
+    }
 
     public WsGatewayServer(int port, String fallbackGameServerUrl, PlayerRegistry playerRegistry,
-                            ShardRegistry shardRegistry, AllocatorClient allocatorClient) {
+                            ShardRegistry shardRegistry, RoomLocationRegistry roomLocationRegistry,
+                            AllocatorClient allocatorClient) {
         super(new InetSocketAddress(port));
         this.fallbackGameServerUrl = fallbackGameServerUrl;
         this.playerRegistry = playerRegistry;
         this.shardRegistry = shardRegistry;
+        this.roomLocationRegistry = roomLocationRegistry;
         this.allocatorClient = allocatorClient;
 
         try {
@@ -64,28 +83,83 @@ public class WsGatewayServer extends WebSocketServer {
 
     @Override
     public void onMessage(WebSocket conn, String message) {
-        UpstreamProxyClient upstream = upstreams.get(conn);
-        if (upstream != null) {
-            if (upstream.isOpen()) {
-                upstream.send(message);
-            }
+        Route route = routes.get(conn);
+        if (route == null) {
+            routeAndConnect(conn, message);
             return;
         }
-        routeAndConnect(conn, message);
+
+        if ("joinRoom".equals(StateCodec.peekType(message))) {
+            Route migrated = migrateIfHostedElsewhere(conn, route, message);
+            if (migrated != null) {
+                route = migrated;
+            }
+        }
+
+        if (route.upstream.isOpen()) {
+            route.upstream.send(message);
+        }
     }
 
     private void routeAndConnect(WebSocket conn, String firstMessage) {
         String username = peekUsername(firstMessage);
-        String host = resolveHost(username);
-        ServerLog.info("Gateway: routing " + (username != null ? username : "<unknown>") + " -> " + host);
+        Resolution resolution = resolveHost(username);
+        ServerLog.info("Gateway: routing " + (username != null ? username : "<unknown>") + " -> " + resolution.host());
         try {
-            UpstreamProxyClient upstream = new UpstreamProxyClient(new URI(host), conn);
+            UpstreamProxyClient upstream = new UpstreamProxyClient(new URI(resolution.host()), conn);
             upstream.connectBlocking();
-            upstreams.put(conn, upstream);
+            routes.put(conn, new Route(upstream, resolution.shardId(), firstMessage));
             upstream.send(firstMessage);
         } catch (Exception e) {
-            ServerLog.error("Gateway: failed to connect upstream to " + host, e);
+            ServerLog.error("Gateway: failed to connect upstream to " + resolution.host(), e);
             conn.close();
+        }
+    }
+
+    /**
+     * If the joinRoom's target room is tracked in the Registry under a different shard than
+     * this connection is currently on, transparently switches the upstream to that shard
+     * (replaying the original login there) and returns the new route. Returns null when no
+     * migration was needed (room not found, already on the right shard, or target unreachable
+     * -- in which case the joinRoom is just forwarded as-is and the shard itself reports the
+     * error).
+     */
+    private Route migrateIfHostedElsewhere(WebSocket conn, Route route, String joinRoomMessage) {
+        String roomId;
+        try {
+            roomId = RoomRegistry.normalizeRoomId(StateCodec.decodeJoinRoomId(joinRoomMessage));
+        } catch (Exception e) {
+            return null;
+        }
+
+        Optional<RoomSummary> located = roomLocationRegistry.find(roomId);
+        if (located.isEmpty()) {
+            return null;
+        }
+        String targetShardId = located.get().shardId();
+        if (targetShardId == null || targetShardId.equals(route.shardId)) {
+            return null;
+        }
+        Optional<String> targetHost = shardRegistry.findHost(targetShardId);
+        if (targetHost.isEmpty()) {
+            return null;
+        }
+
+        try {
+            if (route.upstream.isOpen()) {
+                route.upstream.closeForMigration();
+            }
+            UpstreamProxyClient newUpstream = new UpstreamProxyClient(new URI(targetHost.get()), conn);
+            newUpstream.connectBlocking();
+            newUpstream.send(route.loginMessage);
+            Route newRoute = new Route(newUpstream, targetShardId, route.loginMessage);
+            routes.put(conn, newRoute);
+            ServerLog.info("Gateway: migrated " + conn.getRemoteSocketAddress() + " to shard " + targetShardId
+                    + " for room " + roomId);
+            return newRoute;
+        } catch (Exception e) {
+            ServerLog.error("Gateway: failed to migrate to shard " + targetShardId + " for room " + roomId, e);
+            return null;
         }
     }
 
@@ -100,25 +174,28 @@ public class WsGatewayServer extends WebSocketServer {
         return null;
     }
 
-    private String resolveHost(String username) {
+    private Resolution resolveHost(String username) {
         if (username != null) {
             Optional<PlayerLocation> location = playerRegistry.find(username);
             if (location.isPresent() && "IN_ROOM".equals(location.get().status())) {
-                Optional<String> host = shardRegistry.findHost(location.get().shardId());
+                String shardId = location.get().shardId();
+                Optional<String> host = shardRegistry.findHost(shardId);
                 if (host.isPresent()) {
-                    return host.get();
+                    return new Resolution(host.get(), shardId);
                 }
             }
         }
 
-        return allocatorClient.allocate().map(AllocatorClient.Allocation::host).orElse(fallbackGameServerUrl);
+        return allocatorClient.allocate()
+                .map(a -> new Resolution(a.host(), a.shardId()))
+                .orElse(new Resolution(fallbackGameServerUrl, null));
     }
 
     @Override
     public void onClose(WebSocket conn, int code, String reason, boolean remote) {
-        UpstreamProxyClient upstream = upstreams.remove(conn);
-        if (upstream != null && upstream.isOpen()) {
-            upstream.close();
+        Route route = routes.remove(conn);
+        if (route != null && route.upstream.isOpen()) {
+            route.upstream.close();
         }
     }
 

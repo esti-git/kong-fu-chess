@@ -6,6 +6,7 @@ import server.logging.ServerLog;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -42,6 +43,21 @@ public class RoomLocationRegistry {
                     "updatedAt", Long.toString(System.currentTimeMillis())));
         } catch (Exception e) {
             ServerLog.warn("RoomLocationRegistry: failed to update " + roomId + ": " + e.getMessage());
+        }
+    }
+
+    public Optional<RoomSummary> find(String roomId) {
+        if (jedis == null) return Optional.empty();
+        try {
+            Map<String, String> fields = jedis.hgetAll(KEY_PREFIX + roomId);
+            if (fields == null || fields.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(new RoomSummary(roomId, fields.get("shardId"),
+                    fields.get("whiteUsername"), fields.get("blackUsername")));
+        } catch (Exception e) {
+            ServerLog.warn("RoomLocationRegistry: find failed for " + roomId + ": " + e.getMessage());
+            return Optional.empty();
         }
     }
 

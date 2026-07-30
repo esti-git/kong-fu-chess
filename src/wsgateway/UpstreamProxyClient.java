@@ -16,10 +16,22 @@ import java.net.URI;
 public class UpstreamProxyClient extends WebSocketClient {
 
     private final WebSocket downstream;
+    private volatile boolean suppressDownstreamClose = false;
 
     public UpstreamProxyClient(URI shardUri, WebSocket downstream) {
         super(shardUri);
         this.downstream = downstream;
+    }
+
+    /**
+     * Closes this upstream without closing the downstream client connection it serves --
+     * used when the gateway is migrating a client to a different shard (e.g. a joinRoom
+     * targeting a room hosted elsewhere), where the downstream connection stays open across
+     * the switch.
+     */
+    public void closeForMigration() {
+        suppressDownstreamClose = true;
+        close();
     }
 
     @Override
@@ -36,7 +48,7 @@ public class UpstreamProxyClient extends WebSocketClient {
 
     @Override
     public void onClose(int code, String reason, boolean remote) {
-        if (downstream.isOpen()) {
+        if (!suppressDownstreamClose && downstream.isOpen()) {
             downstream.close();
         }
     }
