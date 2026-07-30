@@ -1,0 +1,95 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: game-server-headless
+  namespace: kungfuchess
+spec:
+  clusterIP: None
+  selector:
+    app: game-server
+  ports:
+    - name: ws
+      port: 8887
+      targetPort: 8887
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: game-server
+  namespace: kungfuchess
+spec:
+  serviceName: game-server-headless
+  replicas: 2
+  selector:
+    matchLabels:
+      app: game-server
+  template:
+    metadata:
+      labels:
+        app: game-server
+    spec:
+      enableServiceLinks: false
+      containers:
+        - name: game-server
+          image: kungfuchess-game-server:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DB_URL
+              value: jdbc:postgresql://postgres:5432/kungfuchess?user=kungfu&password=kungfu
+            - name: REDIS_URL
+              value: redis://redis:6379
+            - name: NATS_URL
+              value: nats://nats:4222
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            # Each replica must register a host in ShardRegistry that points back to itself
+            # specifically, not to the load-balanced Service VIP -- otherwise ws-gateway's
+            # per-shard routing (reconnect-to-your-room, allocator pick) lands on a random
+            # replica instead of the one actually hosting the room. The StatefulSet's stable
+            # per-pod DNS name (via the headless Service above) gives every replica a distinct,
+            # directly-addressable hostname; SHARD_ID already defaults to the same pod hostname.
+            - name: GAME_SERVER_HOST
+              value: ws://$(POD_NAME).game-server-headless.kungfuchess.svc.cluster.local:8887
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          ports:
+            - containerPort: 8887
+            - containerPort: 9001
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9001
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9001
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: game-server
+  namespace: kungfuchess
+spec:
+  selector:
+    app: game-server
+  ports:
+    - name: ws
+      port: 8887
+      targetPort: 8887
+    - name: healthz
+      port: 9001
+      targetPort: 9001

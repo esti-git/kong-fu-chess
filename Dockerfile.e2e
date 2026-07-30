@@ -1,0 +1,14 @@
+FROM maven:3.9-eclipse-temurin-17 AS build
+WORKDIR /build
+COPY pom.xml .
+COPY src ./src
+COPY test ./test
+RUN mvn -DskipTests test-compile
+RUN mvn -DskipTests dependency:copy-dependencies -DoutputDirectory=/build/target/libs
+
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /app
+COPY --from=build /build/target/classes ./classes
+COPY --from=build /build/target/test-classes ./test-classes
+COPY --from=build /build/target/libs ./libs
+ENTRYPOINT ["sh", "-c", "java -cp classes:test-classes:libs/* E2ESmokeTest \"$0\" \"$1\""]
