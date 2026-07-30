@@ -1,13 +1,13 @@
 package server;
 
 import config.GameConfig;
+import io.nats.client.Connection;
+import io.nats.client.Message;
+import nats.NatsConnections;
 import org.json.JSONObject;
 import server.logging.ServerLog;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Optional;
 
@@ -16,26 +16,31 @@ public class AllocatorClient {
     public record Allocation(String shardId, String host) {
     }
 
-    private final String baseUrl;
-    private final HttpClient http = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(2))
-            .build();
+    private final String subject;
+    private Connection connection;
 
-    public AllocatorClient(String baseUrl) {
-        this.baseUrl = baseUrl;
+    public AllocatorClient(String natsUrl) {
+        this.subject = GameConfig.ALLOCATOR_INBOX_SUBJECT;
+        try {
+            this.connection = NatsConnections.connect(natsUrl);
+        } catch (Exception e) {
+            ServerLog.warn("Allocator NATS connection failed: " + e.getMessage());
+            this.connection = null;
+        }
     }
 
     /** Asks the Allocator which shard should host a new room, including how to reach it. */
     public Optional<Allocation> allocate() {
+        if (connection == null) {
+            return Optional.empty();
+        }
         try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(baseUrl + "/api/allocate"))
-                    .timeout(Duration.ofSeconds(2))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString("{}"))
-                    .build();
-            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            JSONObject json = new JSONObject(response.body());
+            Message reply = connection.request(subject, "{}".getBytes(StandardCharsets.UTF_8), Duration.ofSeconds(2));
+            if (reply == null) {
+                ServerLog.warn("Allocator unreachable: no reply within timeout");
+                return Optional.empty();
+            }
+            JSONObject json = new JSONObject(new String(reply.getData(), StandardCharsets.UTF_8));
             String shardId = json.optString("shardId", "");
             String host = json.optString("host", "");
             if (!shardId.isBlank() && !host.isBlank()) {

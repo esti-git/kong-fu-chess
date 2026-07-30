@@ -21,6 +21,15 @@ services:
       timeout: 5s
       retries: 10
 
+  nats:
+    image: nats:2-alpine
+    command: ["-m", "8222"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   matchmaker:
     build:
       context: .
@@ -28,9 +37,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      nats:
+        condition: service_healthy
     environment:
       REDIS_URL: redis://redis:6379
       MATCHMAKER_PORT: 8081
+      NATS_URL: nats://nats:4222
     expose:
       - "8081"
     healthcheck:
@@ -46,9 +58,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      nats:
+        condition: service_healthy
     environment:
       REDIS_URL: redis://redis:6379
       ALLOCATOR_PORT: 8082
+      NATS_URL: nats://nats:4222
     expose:
       - "8082"
     healthcheck:
@@ -64,6 +79,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      nats:
+        condition: service_healthy
       matchmaker:
         condition: service_healthy
       allocator:
@@ -71,8 +88,7 @@ services:
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/kungfuchess?user=kungfu&password=kungfu
       REDIS_URL: redis://redis:6379
-      MATCHMAKER_URL: http://matchmaker:8081
-      ALLOCATOR_URL: http://allocator:8082
+      NATS_URL: nats://nats:4222
       GAME_SERVER_HOST: ws://game-server:8887
     expose:
       - "8887"
@@ -89,6 +105,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      nats:
+        condition: service_healthy
       allocator:
         condition: service_healthy
       game-server:
@@ -97,7 +115,7 @@ services:
       GATEWAY_PORT: 8887
       GAME_SERVER_URL: ws://game-server:8887
       REDIS_URL: redis://redis:6379
-      ALLOCATOR_URL: http://allocator:8082
+      NATS_URL: nats://nats:4222
     ports:
       - "8887:8887"
     healthcheck:

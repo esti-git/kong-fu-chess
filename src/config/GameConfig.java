@@ -43,11 +43,9 @@ public class GameConfig {
     public static final String GAME_SERVER_URL = System.getenv().getOrDefault("GAME_SERVER_URL", "ws://localhost:8887");
 
     public static final int MATCHMAKER_PORT = Integer.parseInt(System.getenv().getOrDefault("MATCHMAKER_PORT", "8081"));
-    public static final String MATCHMAKER_URL = System.getenv().getOrDefault("MATCHMAKER_URL", "http://localhost:8081");
     public static final String QUEUE_KEY = "kfc:matchqueue";
 
     public static final int ALLOCATOR_PORT = Integer.parseInt(System.getenv().getOrDefault("ALLOCATOR_PORT", "8082"));
-    public static final String ALLOCATOR_URL = System.getenv().getOrDefault("ALLOCATOR_URL", "http://localhost:8082");
     public static final int SHARD_HEARTBEAT_SECONDS = 5;
     public static final String GAME_SERVER_HOST = System.getenv().getOrDefault("GAME_SERVER_HOST",
             "ws://localhost:" + GAME_SERVER_PORT);
@@ -59,4 +57,10 @@ public class GameConfig {
             .parseInt(System.getenv().getOrDefault("GAME_SERVER_HEALTH_PORT", "9001"));
     public static final int GATEWAY_HEALTH_PORT = Integer
             .parseInt(System.getenv().getOrDefault("GATEWAY_HEALTH_PORT", "9002"));
+
+    public static final String NATS_URL = System.getenv().getOrDefault("NATS_URL", "nats://localhost:4222");
+    public static final String ALLOCATOR_INBOX_SUBJECT = System.getenv()
+            .getOrDefault("ALLOCATOR_INBOX_SUBJECT", "allocator.inbox");
+    public static final String MATCHMAKER_INBOX_SUBJECT = System.getenv()
+            .getOrDefault("MATCHMAKER_INBOX_SUBJECT", "matchmaker.inbox");
 }
