@@ -16,12 +16,14 @@ public class PlayerRepository {
     private static final int STARTING_RATING = GameConfig.STARTING_RATING;
 
     private final Connection connection;
+    private final String jdbcUrl;
 
     public PlayerRepository() {
         this(GameConfig.DB_URL);
     }
 
     public PlayerRepository(String jdbcUrl) {
+        this.jdbcUrl = jdbcUrl;
         try {
             connection = DriverManager.getConnection(jdbcUrl);
             try (Statement statement = connection.createStatement()) {
@@ -65,6 +67,10 @@ public class PlayerRepository {
             ServerLog.error("Login/register query failed for " + username, e);
             return new LoginResult(false, 0, "Login failed: " + e.getMessage(), false);
         }
+    }
+
+    public String getJdbcUrl() {
+        return jdbcUrl;
     }
 
     public void updateRating(String username, int newRating) {

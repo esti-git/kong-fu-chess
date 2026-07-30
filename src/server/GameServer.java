@@ -17,7 +17,7 @@ public class GameServer extends WebSocketServer {
 
     private volatile boolean running = true;
 
-    private final RoomRegistry roomRegistry = new RoomRegistry();
+    private final RoomRegistry roomRegistry;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
         Thread thread = new Thread(runnable, "matchmaking-timers");
         thread.setDaemon(true);
@@ -27,6 +27,9 @@ public class GameServer extends WebSocketServer {
 
     public GameServer(int port, PlayerRepository repository) {
         super(new InetSocketAddress(port));
+        GameRepository gameRepository = new GameRepository(repository.getJdbcUrl());
+        RoomLocationRegistry roomLocationRegistry = new RoomLocationRegistry(GameConfig.REDIS_URL);
+        this.roomRegistry = new RoomRegistry(gameRepository, roomLocationRegistry);
         PlayerRegistry playerRegistry = new RedisPlayerRegistry(GameConfig.REDIS_URL);
         ShardRegistry shardRegistry = new ShardRegistry(GameConfig.REDIS_URL);
         Matchmaker matchmaker = new Matchmaker(scheduler);

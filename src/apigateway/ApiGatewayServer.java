@@ -2,8 +2,10 @@ package apigateway;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import server.GameRepository;
 import server.PlayerRegistry;
 import server.PlayerRepository;
+import server.RoomLocationRegistry;
 import server.logging.ServerLog;
 
 import java.io.IOException;
@@ -16,18 +18,25 @@ public class ApiGatewayServer {
     private final int port;
     private final PlayerRepository repository;
     private final PlayerRegistry playerRegistry;
+    private final GameRepository gameRepository;
+    private final RoomLocationRegistry roomLocationRegistry;
     private HttpServer httpServer;
 
-    public ApiGatewayServer(int port, PlayerRepository repository, PlayerRegistry playerRegistry) {
+    public ApiGatewayServer(int port, PlayerRepository repository, PlayerRegistry playerRegistry,
+                             GameRepository gameRepository, RoomLocationRegistry roomLocationRegistry) {
         this.port = port;
         this.repository = repository;
         this.playerRegistry = playerRegistry;
+        this.gameRepository = gameRepository;
+        this.roomLocationRegistry = roomLocationRegistry;
     }
 
     public void start() throws IOException {
         httpServer = HttpServer.create(new InetSocketAddress(port), 0);
         httpServer.createContext("/healthz", ApiGatewayServer::handleHealthz);
         httpServer.createContext("/api/login", new LoginHandler(repository, playerRegistry));
+        httpServer.createContext("/api/rooms", new RoomsHandler(roomLocationRegistry));
+        httpServer.createContext("/api/history", new HistoryHandler(gameRepository));
         httpServer.setExecutor(null);
         httpServer.start();
         ServerLog.info("API Gateway listening on port " + port);

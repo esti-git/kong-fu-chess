@@ -15,6 +15,8 @@ import events.PieceCapturedEvent;
 import engine.GameFactory;
 import model.Piece;
 import org.java_websocket.WebSocket;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import protocol.JumpCommand;
 import protocol.MoveCommand;
 import protocol.StateCodec;
@@ -40,6 +42,9 @@ public class Room {
     private final RatingService ratingService;
     private final BoardSnapshotFactory snapshotFactory;
     private final ScheduledExecutorService scheduler;
+    private final GameRepository gameRepository;
+    private final RoomLocationRegistry roomLocationRegistry;
+    private final long createdAt = System.currentTimeMillis();
     private final Object engineLock = new Object();
 
     private boolean ratingsAppliedForCurrentGame;
@@ -51,12 +56,14 @@ public class Room {
     private WebSocket blackConn;
     private final Map<WebSocket, PlayerSession> spectators = new LinkedHashMap<>();
 
-    public Room(String roomId, PlayerRepository repository,
-            ScheduledExecutorService scheduler, BoardSnapshotFactory snapshotFactory) {
+    public Room(String roomId, PlayerRepository repository, ScheduledExecutorService scheduler,
+            BoardSnapshotFactory snapshotFactory, GameRepository gameRepository, RoomLocationRegistry roomLocationRegistry) {
         this.roomId = roomId;
         this.ratingService = new RatingService(repository);
         this.scheduler = scheduler;
         this.snapshotFactory = snapshotFactory;
+        this.gameRepository = gameRepository;
+        this.roomLocationRegistry = roomLocationRegistry;
 
         this.factory = new GameFactory();
         this.factory.initializeStandardBoard();
@@ -75,6 +82,7 @@ public class Room {
             whiteConn = conn;
             whiteSession = session;
             broadcastAssignments();
+            updateRoomIndex();
         }
     }
 
@@ -86,6 +94,7 @@ public class Room {
             this.blackConn = blackConn;
             this.blackSession = blackSession;
             broadcastAssignments();
+            updateRoomIndex();
         }
     }
 
@@ -97,6 +106,7 @@ public class Room {
                 blackConn = conn;
                 blackSession = session;
                 role = PlayerRole.BLACK;
+                updateRoomIndex();
             } else {
                 spectators.put(conn, session);
                 role = PlayerRole.SPECTATOR;
@@ -105,6 +115,14 @@ public class Room {
             replayHistory(conn);
             broadcastAssignments();
             return role;
+        }
+    }
+
+    private void updateRoomIndex() {
+        if (roomLocationRegistry != null) {
+            String whiteUsername = whiteSession == null ? null : whiteSession.getUsername();
+            String blackUsername = blackSession == null ? null : blackSession.getUsername();
+            roomLocationRegistry.update(roomId, GameConfig.SHARD_ID, whiteUsername, blackUsername);
         }
     }
 
@@ -252,11 +270,30 @@ public class Room {
         }
         ratingsAppliedForCurrentGame = true;
 
+        int whiteRatingBefore = whiteSession.getRating();
+        int blackRatingBefore = blackSession.getRating();
+        String whiteUsername = whiteSession.getUsername();
+        String blackUsername = blackSession.getUsername();
+
         ratingService.applyGameEnd(winnerColor, whiteSession, blackSession);
         ServerLog.info("Room " + roomId + ": game ended, winner=" + winnerColor
                 + ", ratings now white=" + whiteSession.getRating() + " black=" + blackSession.getRating());
 
+        if (gameRepository != null) {
+            gameRepository.recordGame(roomId, whiteUsername, blackUsername, winnerColor.name(),
+                    whiteRatingBefore, whiteSession.getRating(), blackRatingBefore, blackSession.getRating(),
+                    createdAt, System.currentTimeMillis(), serializeEventHistory());
+        }
+
         broadcastAssignments();
+    }
+
+    private String serializeEventHistory() {
+        JSONArray array = new JSONArray();
+        for (String json : eventHistory) {
+            array.put(new JSONObject(json));
+        }
+        return array.toString();
     }
 
     private boolean isAuthorized(WebSocket conn, PieceColor color) {

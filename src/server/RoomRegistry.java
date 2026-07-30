@@ -18,6 +18,17 @@ public class RoomRegistry {
     private final Map<String, Room> rooms = new ConcurrentHashMap<>();
     private final Map<WebSocket, String> roomIdByConn = new ConcurrentHashMap<>();
     private final BoardSnapshotFactory snapshotFactory = new BoardSnapshotFactory();
+    private final GameRepository gameRepository;
+    private final RoomLocationRegistry roomLocationRegistry;
+
+    public RoomRegistry() {
+        this(null, null);
+    }
+
+    public RoomRegistry(GameRepository gameRepository, RoomLocationRegistry roomLocationRegistry) {
+        this.gameRepository = gameRepository;
+        this.roomLocationRegistry = roomLocationRegistry;
+    }
 
     public static String normalizeRoomId(String raw) {
         return raw == null ? "" : raw.trim().toUpperCase();
@@ -28,14 +39,14 @@ public class RoomRegistry {
         Room room;
         do {
             roomId = generateId();
-            room = new Room(roomId, repository, scheduler, snapshotFactory);
+            room = new Room(roomId, repository, scheduler, snapshotFactory, gameRepository, roomLocationRegistry);
         } while (rooms.putIfAbsent(roomId, room) != null);
         ServerLog.info("Room " + roomId + " created");
         return room;
     }
 
     public Room createRoomWithId(String roomId, PlayerRepository repository, ScheduledExecutorService scheduler) {
-        Room room = new Room(roomId, repository, scheduler, snapshotFactory);
+        Room room = new Room(roomId, repository, scheduler, snapshotFactory, gameRepository, roomLocationRegistry);
         boolean created = rooms.putIfAbsent(roomId, room) == null;
         if (created) {
             ServerLog.info("Room " + roomId + " created");
@@ -64,6 +75,9 @@ public class RoomRegistry {
         Room room = rooms.get(roomId);
         if (room != null && room.isEmpty()) {
             rooms.remove(roomId);
+            if (roomLocationRegistry != null) {
+                roomLocationRegistry.remove(roomId);
+            }
             ServerLog.info("Room " + roomId + " removed (empty)");
         }
     }
